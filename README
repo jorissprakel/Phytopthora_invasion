@@ -1,1 +1,35 @@
-Dear reader, this is a 
+Dear reader, this is a file describing the code used for the recent Phytopthora invasion paper by Bronkhorst et al.
+
+The inputdata source of this paper is imaging data in a .nd2 format, taken using a nikon C2 confocal. 
+Analysis was performed using matlab scripts, custom written and uploaded into this project.
+The imaging data was structured in folders for each experiment with the label:
+DATE_DETAILS_SPECIES_XXX, with XXX being the nth experiment in that series.
+Inside of each folder, the raw .nd2 data is saved, as is the imaging data in .tif format (exported using nikon NIS software) in the format:
+EXPERIMENTNAME_TX_TYYY_CHANNELNAME, with X being the acquisition series number (1,2,3,4), and YYY being the stacknumber (1st stack taken,
+2nd stack etc) and CHANNELNAME the name of the PMT channel (eGFP, RhodamineB, TD etc).
+
+Worked out data from the analysis scripts was saved in thesame folder as the original data folder.
+The first code used for this are:
+NFM_SigmoidalFit_Test_jb
+This code runs the core algorymthn for the sigmoidal fitting routine on a chosen tif file (_RhodamineB.tif files are the correct input
+for my datasets), full frame. A coarsening can be achieved by adjusting the scale_factor parameters to larger intergers, enabling
+quick analysis of a sample to asses if it is useful.
+An option to select which slices to analyse in the z-stack is present in the code, but generally all slices were taken.
+The full frame of fiew analysis takes a rather long time (about 3 hours for a 512x512 pixel, 41 slices high z-stack), so an ROI selection
+is useful to ensure quick analysis. Each ROI is saved (not automatically!) is saved in the original data folder.
+To select a smaller ROI for analysis, the following code was used:
+NFM_raw_analysis_jbv4_ROI_definer_FromGFP
+This code runs a slice slection and XY selection on a chosen .tif file, and creates many of the input parameters in a strcut called param.
+Don't forget to manually adjust these settings when analysing a new sample, any new settings like the XY sample size etc must be checked
+manually. The code loads in 2 z-stacks, saves the .param containing the coordinates of the Field Of View in the present working directory.
+The parameters.mat file containing the .param is used to generate the correct ROI window. The window and position are saved as a crude
+image in this code as well, making a quick assesment of the chosen ROI possible.
+The follwoing code uses the .param file to generate folders with the reuired data for sigmoidal analysis from the present .tif files:
+NFM_SigmoidalFit_PrepareData_v2ROI
+This codes uses the parameters.mat file containg the .param struct, as generated in ROI_definer to generate ROIs to analyse sigmoidally.
+ROIs are much smaller then their parent full FOV, resulting in a much faster analysis. All timesteps (so each series/stacknumber) are saved
+in a unique folder, labbeled in the order of appearance in the dirlist. Ensure that the DIR command generates the list in the correct order!!!
+
+
+After generation of the data, this workflow was used:
+ROI_define -> Preparedata -> make a folder in the original data folder called ROIXXX -> cut from original data folder the newly gene
