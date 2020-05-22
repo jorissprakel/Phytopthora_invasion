@@ -16,7 +16,8 @@ for my datasets), full frame. A coarsening can be achieved by adjusting the scal
 quick analysis of a sample to asses if it is useful.
 An option to select which slices to analyse in the z-stack is present in the code, but generally all slices were taken.
 The full frame of fiew analysis takes a rather long time (about 3 hours for a 512x512 pixel, 41 slices high z-stack), so an ROI selection
-is useful to ensure quick analysis. Each ROI is saved (not automatically!) is saved in the original data folder.
+is useful to ensure quick analysis. Each ROI is saved (not automatically, the correct working folder must be selected!) in the original data folder.
+
 To select a smaller ROI for analysis, the following code was used:
 NFM_raw_analysis_jbv4_ROI_definer_FromGFP
 This code runs a slice slection and XY selection on a chosen .tif file, and creates many of the input parameters in a strcut called param.
@@ -24,11 +25,11 @@ Don't forget to manually adjust these settings when analysing a new sample, any 
 manually. The code loads in 2 z-stacks, saves the .param containing the coordinates of the Field Of View in the present working directory.
 The parameters.mat file containing the .param is used to generate the correct ROI window. The window and position are saved as a crude
 image in this code as well, making a quick assesment of the chosen ROI possible.
-The follwoing code uses the .param file to generate folders with the reuired data for sigmoidal analysis from the present .tif files:
+The follwoing code uses the .param file and raw images to generate folders with the reuired data for sigmoidal analysis from the present .tif files:
 NFM_SigmoidalFit_PrepareData_v2ROI
 This codes uses the parameters.mat file containg the .param struct, as generated in ROI_definer to generate ROIs to analyse sigmoidally.
 ROIs are much smaller then their parent full FOV, resulting in a much faster analysis. 
-All timesteps (so each series/stacknumber) are saved in a unique folder, labbeled in the order of appearance in the dirlist. 
+All timesteps (so each series/stacknumber) are saved in new unique folders, labbeled in the order of appearance in the dirlist. 
 Ensure that the DIR command generates the list in the correct order!!!
 
 After generation of the folders containing each timesteps ROI data, this workflow was used:
@@ -37,7 +38,37 @@ ROI_define -> Preparedata -> make a folder in the original data folder called RO
 This flow ensures that no previous parameters.mat file is present in the original data folder, ensuring that no data mixing happens!!
 The workflow can then be followed again to define a seond ROI, a third, etc.
 
-After defining the correct ROIs,
+After defining the correct ROIs and saving them in their respective folder, the following code was run:
+NFM_SigmoidalFit_FitData_controller_v1
+It is impervious that you are in the correct ROIXXX folder directory, and not top level original data folder.
+This code is a top level code, calling the function "NFM_SigmoidalFit_FitData_v2_smallerboundaryForDetiltingv2" to be run in each folder.
+The code moves into each folder, loads in the prepared workspace.mat file with all the relevant data and runs the work function.
+Again, having the correct dir command is vital here to ensure proper indexing. The workflow used in this case was usually:
+open ((#coresCPU/2) -1) instances of matlab, save the scripts as this number of different versions by adding _1, _2 etc.
+Run in each matlab instance a unique controller script version, changing the iterator i to ensure all versions of the scripts are wokring on different folders.
+This is a low level parallelzation that works very efficiently without requiring non-communicating versions of iterable scripts,
+which are impossible to run in parralel pool matlab (and avoids requiring this package to run the code).
+
+The workfunction "NFM_SigmoidalFit_FitData_v2_smallerboundaryForDetiltingv2" works like this:
+it generates several saving parameters (zpos_FPL_final is the final displacement map) at the start, 
+filters the raw images after which a for loop is made:
+in the loop, each x,y pixels sigmoidal z-profile decay is analysed and the centre determined, which is taken as the height.
+(it now runs about 20-30 pixels/second, for a 500x500 pixel sample = 250.000 traces, takes a while to analyse...)
+After the loop, a raw displacement map is the output, which needs to be corrected for tilt (a few microns/200 micron, but still...)
+A bounding frame of 5 microns thich on the ROI is selected for tilt correction, after which:
+in x and y direction a linear fit is performed to determine the slope on bot sides, and the median slope is selected.
+The sample is compensated for the slope with the top left pixel as reference point, using a singular value for the slope.
+The use of a singular value is important, we only wish to correct for linear large scale displacement and not induce curvature, 
+while local curvature (induced by organisms!) are the main interest of the paper. 
+After curvature correction the sample is lowered to median height of the sample, to ensure all displacements are from a reference frame of 0.
+Analysis of the workfunction is done, and to visualise several plots of the data are made:
+- pre-curvature correction
+- post-curvature correction
+- post-curvature correction in nm (not used in study)
+- Error map to show hotspots of analysis failure (highly autofluorescent dead cells/bubbles in the PDMS)
+Data is then saved, and the work function is complete.
+IMPORTANT: the work function requires the highly popular cbrewer colourmaps, downloadable from:
+https://nl.mathworks.com/matlabcentral/fileexchange/34087-cbrewer-colorbrewer-schemes-for-matlab
 
 Analysis of displacement images -> profiles
 
