@@ -1,0 +1,173 @@
+
+
+clear all
+
+%Basic data analysis for Normal Force Microscopy (NFM), which takes a raw
+%multipage tiff and reconstructs the surface profile with sub-pixel
+%resolution
+
+%Last update on: 2018-10-11 by Jochem Bronkhorst
+
+%% Input parameters %%
+
+%Input parameter overview
+% - Scale_factor: every nth element in xy being analysed. 1/scalfac^2=frac
+% pixel analysed.
+% - z_pixel: The step size in Z between two slices, in micron. 0.5 usually
+
+scale_factor = 1;
+z_pixel = 0.5;
+
+%Parameter overview
+param=struct;
+param.binning = 2; %size of binning dimension, minimum = 2
+param.xy_pixel = 0.41; %size of pixels in the xy direction in micrometers
+%.41 = standard for CLSM-1, 60x objective
+param.z_pixel = z_pixel;
+param.scale_factor = scale_factor;
+xy_pixel_true=param.xy_pixel*scale_factor;%the real scaling between two points in xy
+param.xy_pixel_true = xy_pixel_true;
+
+%% Load file %%
+
+%we first locate the multipage tiff we want to analyse and load it into the
+%matlab memory
+[file,path] = uigetfile('*.tif', 'Select a GFP TIFF file for ROI selection');
+img_info = imfinfo(file);
+tiff_sizex = img_info.Width; %x size of the stack
+param.width=tiff_sizex-1;%save this for future reference, depends on binning!
+tiff_sizey = img_info.Height; %y size of the stack
+param.height=tiff_sizey-1;%save this for future reference, depends on binning!
+tiff_sizez = size(imfinfo(file),1); %height of the stack
+
+% Display file names that are analysed
+disp(strcat(['Analysing ',file,' from path ',path]));
+
+%create the image stack in double format
+counter=1;
+FPL=nan(tiff_sizex,tiff_sizey,tiff_sizez);
+
+for k = 1:tiff_sizez
+    A = double(imread([path, file], k));
+    FPL(:,:,counter)=A;
+    counter=counter+1;
+end
+%% Determine position %%
+
+% Assume the gaussian profile can be determined from an analysis of total
+% intensity in the sample. Create a popup window, and let people select a
+% box that then is used to determine the im_start and im_end.
+
+%Compute the summed intensity per slice
+FPL_summed= reshape(sum(sum(FPL)),[],1);
+
+figure;
+select_gauss = plot(param.z_pixel*[1:numel(FPL_summed)],FPL_summed);
+title('Please draw a box to define searched slices. Close window to continue');
+xlabel('z position (micrometers)');
+ylabel('Intensity (AU)');
+
+h = imrect;%draw a rectangle over the gauss
+select_gauss_position=h.getPosition;%get the position back that was selected upon closing
+waitfor(select_gauss)
+%The positions in imrect are too narrow to use: round off to the z_size
+im_start=round(select_gauss_position(1)/param.z_pixel);
+im_end=round((select_gauss_position(1)+select_gauss_position(3))/param.z_pixel); %(left boundary+width)/resolution
+
+%check if the box is drawn over the end, then replace sectioning with end.
+if im_end>k
+    im_end=k;
+end
+
+%Slice the probe layer from the entire stack
+FPL=FPL(:,:,im_start:im_end);
+
+%To show the images:
+%for i=1:19
+%    imagesc(FPL(:,:,i))
+%    colorbar
+%    pause(2)
+%    close
+%end
+
+
+%Load in the corresponding image channel
+[file2,path2] = uigetfile('*.tif', 'Select a dye TIFF file for ROI selection');
+img_info2 = imfinfo(file2);
+tiff_sizex2 = img_info2.Width; %x size of the stack
+param.width2=tiff_sizex2-1;%save this for future reference, depends on binning!
+tiff_sizey2 = img_info2.Height; %y size of the stack
+param.height2=tiff_sizey2-1;%save this for future reference, depends on binning!
+tiff_sizez2 = size(imfinfo(file2),1); %height of the stack
+
+% Display file names that are analysed
+disp(strcat(['Analysing ',file2,' from path ',path2]));
+
+%create the image stack in double format
+counter2=1;
+FPL2=nan(tiff_sizex2,tiff_sizey2,tiff_sizez2);
+
+for k = 1:tiff_sizez2
+    A = double(imread([path2, file2], k));
+    FPL2(:,:,counter2)=A;
+    counter2=counter2+1;
+end
+
+% Use data from dye channel, top 10% to mask where things have died
+
+sumFPL2 = sum(FPL2,3);
+maskFPL2 = sumFPL2>0.7*max(max(sumFPL2));
+
+sumFPL = sum(FPL,3);
+maxFPLGFP = max(max(sum(FPL,3)));
+sumFPL(maskFPL2) = maxFPLGFP;
+% figure; imagesc(sumFPL); axis equal;
+figure; imagesc(FPL2(:,:,round(size(FPL2,3)/2))); axis equal;
+
+
+%% ROI selection %%
+
+% ROI was selected from last stack in the GFP series (largest width of sample
+% observed. Next time: select ROI from fluorescent images, is much clearer!
+
+% figure;
+% select_ROI = imagesc(sumFPL); axis equal;
+figure; imagesc(FPL2(:,:,round(size(FPL2,3)/2))); axis equal;
+title('Please draw a box to define searched slices. Close window to continue');
+xlabel('z position (micrometers)');
+ylabel('y position (micrometers)');
+
+h = imrect;%draw a rectangle over the gauss
+select_ROI_position=h.getPosition;%get the position back that was selected upon closing
+select_ROI_position_round=round(select_ROI_position);
+waitfor(select_ROI_position)
+
+% Punch out this data from FPL to be analysed
+ROI_width = select_ROI_position_round(3); 
+ROI_height = select_ROI_position_round(4);
+ROI_xmin = select_ROI_position_round(1);
+ROI_ymin = select_ROI_position_round(2);
+
+% make an image of the 
+
+sumFPLROI = sumFPL;
+sumFPLROI(ROI_ymin:ROI_ymin+ROI_height,ROI_xmin:ROI_xmin+ROI_width) = 0;
+figure; imagesc(sumFPLROI);
+print(gcf,'-dtiff', '-r600', ['ROIimagepunchout.tif']);
+close
+
+% The following code was used to punch out correctly
+FPL=FPL(ROI_ymin:ROI_ymin+ROI_height,ROI_xmin:ROI_xmin+ROI_width,:);
+
+% save the dimensions and posion of ROI in param
+param.width = ROI_width;
+param.height = ROI_height;
+param.ROI_xmin = ROI_xmin;
+param.ROI_ymin = ROI_ymin;
+
+save 'parameters.mat' param;
+
+
+imagesc(sum(FPL,3)) %save a copy of the ROI
+print(gcf,'-dtiff', '-r600', ['ROIimage.tif']);
+close all
