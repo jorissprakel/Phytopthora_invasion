@@ -1,0 +1,502 @@
+% This is code to analyse a fluorescent slab of PDMS, fitting sigmoidal
+% functions to the decay to determine the interfac position. This code is
+% heavily based upon the work of Joris Sprakel and Jochem Bronkhorst to fit
+% dye layers encapsulated inside of a pdms matrix.
+
+clear all
+
+%we first locate the multipage tiff we want to analyse and load it into the
+%matlab memory
+[file,path] = uigetfile('*.tif', 'Select a TIFF file for analysis');
+img_info = imfinfo(file);
+tiff_sizex = img_info.Width;
+param.width=tiff_sizex-1;%save this for future reference, depends on binning!
+tiff_sizey = img_info.Height;
+param.height=tiff_sizey-1;%save this for future reference, depends on binning!
+tiff_sizez = size(imfinfo(file),1);
+
+%some other parameters
+scale_factor = 1;
+z_pixel = 0.5;
+%Parameter overview
+param=struct;
+param.binning = 2; %size of binning dimension, minimum = 2
+param.xy_pixel = 0.41; %size of pixels in the xy direction in micrometers
+%.41 = standard for CLSM-1, 60x objective
+param.z_pixel = z_pixel;
+param.scale_factor = scale_factor;
+xy_pixel_true=param.xy_pixel*scale_factor;%the real scaling between two points in xy
+param.xy_pixel_true = xy_pixel_true;
+
+%create the image stack in double format
+counter=1;
+FPL=nan(tiff_sizex,tiff_sizey,tiff_sizez);
+
+for k = 1:tiff_sizez
+    A = double(imread(fullfile(path, file), k));
+    FPL(:,:,counter)=A;
+    counter=counter+1;
+end
+
+% We wish to analyse the glass PDMS interface, so we will invert the stack
+% for analysis.
+% to check, turn this on:
+% plot(reshape(sum(sum(FPL)),[],1))
+% hold on
+% plot(reshape(sum(sum(flip(FPL,3))),[],1))
+% pause(2)
+% close all
+
+%the operation:
+FPL = flip(FPL,3);
+
+%% Determine position %%
+
+% Assume the gaussian profile can be determined from an analysis of total
+% intensity in the sample. Create a popup window, and let people select a
+% box that then is used to determine the im_start and im_end.
+
+%Compute the summed intensity per slice
+FPL_summed= reshape(sum(sum(FPL)),[],1);
+
+figure;
+select_gauss = plot(param.z_pixel*[1:numel(FPL_summed)],FPL_summed);
+title('Please draw a box to define searched slices. Close window to continue');
+xlabel('z position (micrometers)');
+ylabel('Intensity (AU)');
+h = imrect;%draw a rectangle over the gauss
+select_gauss_position=h.getPosition;%get the position back that was selected upon closing
+waitfor(select_gauss)
+%The positions in imrect are too narrow to use: round off to the z_size
+im_start=round(select_gauss_position(1)/param.z_pixel);
+im_end=round((select_gauss_position(1)+select_gauss_position(3))/param.z_pixel); %(left boundary+width)/resolution
+
+%check if the box is drawn over the end, then replace sectioning with end.
+if im_end>k
+    im_end=k;
+end
+
+if im_start<0
+    im_start=0;
+end
+
+%Slice the probe layer from the entire stack
+FPL=FPL(:,:,im_start:im_end);
+
+% Update A, the reference frame to be analysed, so the code below runs it
+% as normal :)
+A = FPL(:,:,1);
+
+%% Fitting gausses to the sample%%
+
+zpos_FPL=zeros(numel(A(:,1))-(param.binning-1) , numel(A(1,:))-(param.binning-1));
+R2_FPL=zeros(numel(A(:,1))-(param.binning-1) , numel(A(1,:))-(param.binning-1));
+
+%Now we run the fitting routine
+disp('Running analysis of the surface profile');
+       
+% Alternative quicker:
+filtermat = [[0 ,1 ,0];[1 ,1 ,1];[0 ,1 ,0]];
+%Change the binfilter if you wish.
+datamatrix_binned = imfilter(FPL,filtermat);
+
+% plot all x,y traces
+% Turn this on if you wish to see a good sample of the to be analysed
+% curves
+% for m=param.binning:20:numel(A(:,1))
+%     figure; hold on;
+%     for n=param.binning:20:numel(A(1,:))
+%         thisrow = reshape(datamatrix_binned(m,n,:),[],1);
+%         plot(z_pixel*[1:scale_factor:size(thisrow,1)],thisrow)
+%     end
+%     pause(2)
+%     m
+% end
+
+for k=param.binning:scale_factor:numel(A(:,1))
+   for l=param.binning:scale_factor:numel(A(1,:))
+        
+        thisrow=datamatrix_binned(k,l,:);
+       
+       
+        [M I]= max(thisrow);
+        [xData, yData] = prepareCurveData([], thisrow);
+        % we now have a decay, we need growth. flipud!
+        yData_flip = yData;
+%         yData_flip = flipud(yData);
+        % Set up fittype and options.
+        
+        ft = fittype( 'a/(1+exp(-(x-c)))', 'independent', 'x', 'dependent', 'y' );
+        opts = fitoptions( 'Method', 'NonlinearLeastSquares' );
+        opts.Display = 'Off';
+        opts.StartPoint = [M 0.391860660329301];
+
+        % Fit model to data.
+        [fitresult, gof] = fit( xData, yData_flip, ft, opts );
+
+        % Plot fit with data.
+        figure( 'Name', 'untitled fit 1' );
+        h = plot( fitresult, xData, yData_flip);
+        legend( h, 'Experimental data', 'sigmoidal fit', 'Location', 'NorthEast');
+        % Label axes
+        xlabel('z slice')
+        ylabel('fluorescent intensity PDMS dye (A.U.)')
+        set(gca, 'XDir','reverse')
+        pause(.2)
+        close(gcf)
+%         
+        % Decomment the next few lines if you wish to see plots
+        %plot(xData,yData_flip);
+        %pause(.2)
+        %close(gcf)
+        zpos_FPL(k-(param.binning-1),l-(param.binning-1))=fitresult.c;
+        R2_FPL(k-(param.binning-1),l-(param.binning-1))=gof.rsquare;
+   end
+if k==param.binning
+    progressbar=waitbar(k/numel(A(:,1)),'fitting percentage complete');
+elseif k>param.binning
+    waitbar(k/numel(A(:,1)),progressbar);
+end
+end
+close(progressbar)
+
+% Old version:
+% for k=param.binning:scale_factor:numel(A(:,1))
+%    for l=param.binning:scale_factor:numel(A(1,:))
+%         
+%        thisrow=[];
+%        thisrow=squeeze(FPL(k,l,:));
+% 
+%        %perform the param.binning
+%        for m=1:(param.binning-1)
+%            
+%          for n=0:(param.binning-1)
+%        
+%            thisrow=thisrow+squeeze(FPL(k-m,l-n,:));
+% 
+%          end
+%          
+%        end
+%        
+%        [M I]= max(thisrow);
+%         [xData, yData] = prepareCurveData([], thisrow);
+%         % Set up fittype and options.
+%         ft = fittype( 'gauss1' );
+%         opts = fitoptions( 'Method', 'NonlinearLeastSquares' );
+%         opts.Display = 'Off';
+%         opts.Lower = [0 0 0];
+%         opts.StartPoint = [M I 1];
+%         opts.MaxFunEvals = 100;
+%         opts.MaxIter = 50;
+%         % Fit model to data.
+%         [fitresult, gof] = fit( xData, yData, ft, opts );
+%         
+%         % Decomment the next few lines if you wish to see plots
+%         %plot(xData,yData);
+%         %pause(.2)
+%         %close(gcf)
+%         zpos_FPL(k-(param.binning-1),l-(param.binning-1))=fitresult.b1;
+%         R2_FPL(k-(param.binning-1),l-(param.binning-1))=gof.rsquare;
+%    end
+% if k==param.binning
+%     progressbar=waitbar(k/numel(A(:,1)),'fitting percentage complete');
+% elseif k>param.binning
+%     waitbar(k/numel(A(:,1)),progressbar);
+% end
+% end
+% close(progressbar)
+
+%select every nth pixel and create a new zpos_FPL
+mask=zeros(numel(A(:,1))-(param.binning-1) , numel(A(1,:))-(param.binning-1));
+mask((param.binning:scale_factor:numel(A(:,1)))-1,(param.binning:scale_factor:numel(A(1,:)))-1)=1;
+zpos_FPL=zpos_FPL(mask==1);
+zpos_FPL=reshape(zpos_FPL,[length(param.binning:scale_factor:numel(A(:,1))) length(param.binning:scale_factor:numel(A(1,:)))]);
+%and a new R2 FPL!!!!
+R2_FPL=R2_FPL(mask==1);
+R2_FPL=reshape(R2_FPL,[length(param.binning:scale_factor:numel(A(:,1))) length(param.binning:scale_factor:numel(A(1,:)))]);
+
+disp('fitting completed')
+
+%% Tilt Correction %%
+%We perform a rudimentary tilt correction, and run the xy tilt correction
+
+%We start by selecting a ROI which represents the base line, to do a tilt
+%correction and to place the baseline level at zero
+
+% imagesc(zpos_FPL);
+% disp('Select a rectangle in the image that represents the undeformed baseline')
+% baseline=imcrop;
+% close all
+
+% In case you want to run the intire picture, always:
+baseline=zpos_FPL;
+
+% Want to see the plots?
+show_plot_tiltcorr=false; %Set this to true if doubt persists over surface compensation!
+
+% We will run the tilt correction using the bounding box as selected in the
+% image. 
+
+boxbound_width=10;%in microns
+boxbound_width_pix=round(boxbound_width/param.xy_pixel_true);%True pix scale of thickness
+% Compute the slopes of top/bottom/left/right
+baseline_sizex=size(baseline(1,:),2);
+baseline_sizey=size(baseline(:,1),1);
+leftright=horzcat(1:boxbound_width_pix,baseline_sizex-boxbound_width_pix:baseline_sizex);%indexes of top and bottom
+topbottom=horzcat(1:boxbound_width_pix,baseline_sizey-boxbound_width_pix:baseline_sizey);%indexes of left and right
+
+%determine slope in x direction (rows)
+slope_x=[];
+for k=topbottom
+    thisrow = squeeze(baseline(k,:));
+    x = [1:1:length(thisrow)];
+    [linfit]=polyfit(x,thisrow,1);
+    if show_plot_tiltcorr==1
+        plot(x,thisrow)
+        hold on
+        plot(x,linfit(2)+linfit(1)*x)
+        pause(1)
+        close all
+    end
+    slope_x=[slope_x; linfit(1)];
+end
+slope_x_avg=median(slope_x);
+
+%determine slope in y direction (columns)
+slope_y=[];
+for k=leftright
+    thisrow = squeeze(baseline(:,k))';%flip so polyfit gets two thesame vectors
+    y = [1:1:length(thisrow)];
+    [linfit]=polyfit(y,thisrow,1);
+    if show_plot_tiltcorr==1
+        plot(y,thisrow)
+        hold on
+        plot(y,linfit(2)+linfit(1)*y)
+        pause(1)
+        close all
+    end
+    slope_y=[slope_y; linfit(1)];
+end
+slope_y_avg=median(slope_y);
+
+zpos_FPL_test=zpos_FPL;
+
+%compensate for rows (x)
+for k=1:numel(zpos_FPL(:,1))
+    zpos_FPL_test(k,:)=zpos_FPL(k,:)-slope_x_avg*[0:1:(length(zpos_FPL(1,:))-1)];
+    if show_plot_tiltcorr==1
+        plot(1:param.width,zpos_FPL(k,:))
+        hold on
+        plot(1:param.width,zpos_FPL_test(k,:))
+        pause(1)
+        close
+    end
+end
+
+%compensate for columns (y) Write over zpos_FPL_test to save the data!
+for k=1:numel(zpos_FPL(1,:))
+    zpos_FPL_test(:,k)=zpos_FPL_test(:,k)-slope_y_avg*[0:1:(length(zpos_FPL(:,1))-1)]';
+    if show_plot_tiltcorr==1
+        plot(1:param.width,zpos_FPL(:,k))
+        hold on
+        plot(1:param.width,zpos_FPL_test(:,k))
+        pause(0.3)
+        close
+    end
+end
+
+
+zpos_FPL_final=zpos_FPL_test-median(median(zpos_FPL_test));
+zpos_FPL_final=zpos_FPL_final*param.z_pixel;%convert the pixel values to heights
+ 
+% Profile corrected for inversion analysis, inverted displacements
+zpos_FPL_final = zpos_FPL_final*-1;
+
+disp('Tilt correction completed')
+
+%% Saving data%%
+
+% Make a new folder to save results
+OldFolder = cd(path);
+mkdir(strtok(file,'.')); %this creates the correct folder
+cd(strtok(file,'.'));
+
+% Generate a divergent colormap
+colormap_div = cbrewer('div', 'RdBu', 100,'PCHIP');
+
+% Generate figures
+
+themap1=figure;
+imagesc(xy_pixel_true*[1:1:numel(zpos_FPL(1,:))],xy_pixel_true*[1:1:numel(zpos_FPL(:,1))],zpos_FPL);
+title('Z-profile probe layer - before correction (in microns)');
+axis equal
+axis ([0 xy_pixel_true*numel(zpos_FPL_final(1,:)) 0 xy_pixel_true*numel(zpos_FPL_final(:,1))])
+xlabel('x (micrometers)');
+ylabel('y (micrometers)');
+zlabel('z (micrometers)');
+az = 0;
+el = 90;
+view(az, el);
+colorbar;
+colormap plasma
+% colormap(flipud(colormap_div))
+%caxis([min(min(zpos_FPL)) max(max(zpos_FPL)) ]);
+caxis(prctile(zpos_FPL(:),[1 99])) %Get the 5th percentile and 95th percentile as min and max
+    print(themap1,'-dtiff', '-r600', ['z_beforetiltcorr.tif']);
+savefig(themap1,'Z_map.fig')
+
+%zpos_FPL_temp=zpos_FPL_temp-mean(mean(zpos_FPL_temp));
+%zpos_FPL_temp=zpos_FPL_temp*param.z_pixel;
+
+themap3=figure;
+imagesc(xy_pixel_true*[1:1:numel(zpos_FPL_final(1,:))],xy_pixel_true*[1:1:numel(zpos_FPL_final(:,1))],zpos_FPL_final);
+title('Z-profile probe layer - after correction (in microns)');
+xlabel('x (micrometers)');
+ylabel('y (micrometers)');
+zlabel('z (micrometers)');
+axis equal
+axis ([0 xy_pixel_true*numel(zpos_FPL_final(1,:)) 0 xy_pixel_true*numel(zpos_FPL_final(:,1))])
+az = 0;
+el = 90;
+view(az, el);
+colorbar;
+% colormap plasma
+colormap(flipud(colormap_div))
+%caxis([min(min(zpos_FPL_final)) max(max(zpos_FPL_final)) ]);
+caxis([-2 2])
+% caxis(prctile(zpos_FPL(:),[0.1 99.9])-mean(mean(zpos_FPL_test)));%axis scaling like the 
+print(themap3,'-dtiff', '-r600', ['z_aftertiltcorr_nonrenorm.tiff']);
+savefig(themap3,'Z_map_corr_nonrenorm.fig')
+
+themap4=figure;
+imagesc(xy_pixel_true*[1:1:numel(zpos_FPL_final(1,:))],xy_pixel_true*[1:1:numel(zpos_FPL_final(:,1))],1000*zpos_FPL_final);
+title('Z-profile probe layer - after correction (in nanometers, renormalised)');
+xlabel('x (micrometers)');
+ylabel('y (micrometers)');
+zlabel('z (micrometers)');
+axis equal
+axis ([0 xy_pixel_true*numel(zpos_FPL_final(1,:)) 0 xy_pixel_true*numel(zpos_FPL_final(:,1))])
+az = 0;
+el = 90;
+view(az, el);
+colorbar;
+% colormap plasma
+colormap(flipud(colormap_div))
+% caxis(prctile(zpos_FPL_final(:),[0.1 99.9])*1000) %Get the 5th percentile and 95th percentile as min and max
+caxis([-2 2]*1000)
+print(themap4,'-dtiff', '-r600', ['z_aftertiltcorr_renorm_zoom1.tif']);
+savefig(themap4,'Z_map_corr_renorm.fig')
+    
+themap2=figure;
+imagesc(xy_pixel_true*[1:1:numel(R2_FPL(1,:))],xy_pixel_true*[1:1:numel(R2_FPL(:,1))],R2_FPL);
+title ('R2');
+xlabel('x (micrometers)');
+ylabel('y (micrometers)');
+zlabel('R2');
+axis equal
+axis ([0 xy_pixel_true*numel(zpos_FPL_final(1,:)) 0 xy_pixel_true*numel(zpos_FPL_final(:,1))])
+az = 0;
+el = 90;
+view(az, el);
+colorbar;
+colormap plasma
+caxis([0 1]);
+print(themap2,'-dtiff', '-r600', ['R2.tif']);
+savefig(themap2,'R2.fig')
+
+save 'zpos_FPL_final.mat' zpos_FPL_final;
+save 'zpos_FPL.mat' zpos_FPL;
+save 'R2_FPL.mat' R2_FPL;
+save 'parameters.mat' param;
+close all
+
+themap6=figure;
+imagesc(xy_pixel_true*[1:1:numel(zpos_FPL_final(1,:))],xy_pixel_true*[1:1:numel(zpos_FPL_final(:,1))],1000*(zpos_FPL_final));
+title('Z-profile probe layer - after correction (in nanometers, renormalised)');
+axis equal
+axis ([0 xy_pixel_true*numel(zpos_FPL_final(1,:)) 0 xy_pixel_true*numel(zpos_FPL_final(:,1))])
+xlabel('x (micrometers)');
+ylabel('y (micrometers)');
+zlabel('z (micrometers)');
+%axis1=gca;
+%axis1.XLim=axis1.YLim;% make the axis equal!
+colorbar;
+caxis(prctile(zpos_FPL_final(:),[0.1 99.9])*1000) %Get the 5th percentile and 95th percentile as min and max
+colormap inferno
+
+%Find indexes with intensity below threshold
+MaxIntMap = max(FPL,[],3); %finds the max value of each pixel
+MaxMaxIntensity = max(max(MaxIntMap)); %maximum intensity in image
+Intfactor = 15; %Minimum intensity threshold, #*MaxIntVal
+LogIntMap = MaxIntMap < MaxMaxIntensity./Intfactor;
+%apply logical field Intensity
+hold on
+no_pix = size(MaxIntMap,1)*size(MaxIntMap,2);
+[pos_x_green,pos_y_green] = find(LogIntMap == 1);
+%plot values
+scatter(xy_pixel_true*pos_y_green, xy_pixel_true*pos_x_green, 10E6/no_pix.^2,'o','g','LineWidth',2);
+
+%R2 logicals from fitting below threshold:
+R2thresh = 0.5;
+LogR2Map = R2_FPL < R2thresh;
+no_pix = size(MaxIntMap,1)*size(MaxIntMap,2);
+[pos_x_green_R2,pos_y_green_R2] = find(LogR2Map == 1);
+%plot values
+scatter(xy_pixel_true*pos_y_green_R2, xy_pixel_true*pos_x_green_R2, 10E6/no_pix.^2,'x','g','LineWidth',2);
+
+print(themap6,'-dpng', '-r600', ['Z_map_CircInt_CrossR2_errormap.tif']);
+savefig(themap6,'Z_map_CircInt_CrossR2_errormap.fig')
+close all
+
+%intensity profile box
+figure;
+imagesc(zpos_FPL_final);
+caxis([0 22]);
+tbanalysed=imcrop();
+tbanalysed_mean=mean(tbanalysed,1);
+plot(tbanalysed_mean)
+xlabel('Distance along profile (in pixels)')
+ylabel('Deflection (micrometers)');
+dirname = pwd;
+print(gcf,'-dpng', '-r300', [fullfile(dirname,'Plot_profile_cyst_avg')]);
+
+%     get a distribution of resolution for a smooth sample
+zposarray=tbanalysed(:);
+[counts, centers]=hist(zposarray,100);
+[xData, yData] = prepareCurveData( centers, counts );
+% Set up fittype and options.
+ft = fittype( 'gauss1' );
+opts = fitoptions( 'Method', 'NonlinearLeastSquares' );
+opts.Display = 'Off';
+opts.Lower = [-Inf -Inf 0];
+opts.StartPoint = [max(counts) mean(centers) std(centers)];
+% Fit model to data.
+[fitresult, gof] = fit( xData, yData, ft, opts );
+%generate fitdata for the correct centrering in the hist
+centre=fitresult.b1;
+xi = (-2+centre:0.001:2+centre).';
+%ci = predint(fitresult,xi)
+% Plot fit with data.
+reshist=figure;
+bar(xData,yData);
+hold all;
+plot(xi,fitresult(xi));
+xmax=max(abs(centers));
+ymax=max(abs(counts));
+axis([-2+centre 2+centre 0 1.1*ymax]);%x axis from -100nm to +100 nm
+legend('experimental data', 'Gaussian fit');
+% Label axes
+xlabel 'z-noise (microns)';
+ylabel 'counts';
+grid off;
+resolution=1000*fitresult.c1;
+save 'resolution_in_nanometers.mat' resolution;
+title(['Deformation resolution (FWHM) = ' num2str(round(resolution)) 'nm']);
+print(reshist,'-dtiff', '-r600', ['resolution_histogram.tif']);
+close all
+
+save workspace.mat 
+
+
+cd(OldFolder)
+disp('Sample completed')
