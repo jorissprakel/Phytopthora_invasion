@@ -1,0 +1,22 @@
+clear all
+
+% Get a list of all files and folders in this folder.
+files = dir('E:\P_infestans\Imaging\Jochem Bronkhorst\P Infestans Invasion Project Concurrent Confocal Data\20190905_15xdil_Slabmeas_100kPa_PIwt_2');
+% Get a logical vector that tells which is a directory.
+dirFlags = [files.isdir];
+% Extract only those that are directories.
+subFolders = files(dirFlags);
+
+for i=3:70
+    wrkspcename2=subFolders(i).name;
+    %load in the workspace    
+    wrkspcefolder2 = pwd;
+    cd(fullfile(wrkspcefolder2,wrkspcename2));
+    load('workspace.mat')
+    tic
+    NFM_SigmoidalFit_FitData_v2_smallerboundaryForDetiltingv2
+    toc
+    wrkspcename2
+    cd(wrkspcefolder2)
+    clearvars -except i subFolders
+end
