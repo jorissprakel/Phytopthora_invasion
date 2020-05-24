@@ -1,0 +1,134 @@
+function [u,un,ut] = SurfaceDisplacementProfileFromForceDistribution(x,y,xi,eta,p,qx,E,v) 
+
+% Calculate the displacement profile at the points given by x and y on
+% surface (z=0)
+% from a force distribution at the surface (z=0) specified by p(xi,eta) and 
+% qx(xi,eta) where p is the normal pressure exerted at coordinates xi,eta 
+% and qx the tangential pressure in the x direction
+% E is Young's modulus, v Poisson ratio
+%
+% Output is matrix u = [ux, uy, uz]   (Nx3 matrix)
+% plus matrices un and up for components due to normal and tangential force
+%
+% The coordinates x, y and z are Nx1 vectors 
+% xi, eta, p and qx are Mx1 vectors, with xi and eta equally spaced!
+%
+% Displacement is calculated from Boussinesq and Cerutti solutions for
+% response to a concentrated point force in normal, and tangential
+% direction, resepctively
+% un_i= int Gn_i(x-xi,y-eta,z)*p(xi,eta)*dxi*deta
+% ut_i= int Gt_i(x-xi,y-eta,z)*qx(xi,eta)*dxi*deta
+% where Gn_i, Gt_i are the Green's functions for displacement component i 
+% These are specified in Johnson, "Contact Mechanics", p.50/51 and p. 69,
+% respectively
+% The integrals are calculated by semi-analytical method, i.e. the Green's
+% function is first integrated analyticaly over the grid-element dxi*deta
+% and then summed over all xi and eta:
+% un_i=sum_xi_i sum_eta_j Dn_i(x-xi_i,y-eta_j,z)*p(xi_i,eta_j)
+% where Dn_i=int Gn_i(x-xi,y-eta,z) dxi*deta over the element dxi*deta
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+% First calculate the distances x-xi, y-eta as MxN matrix
+% Make sure xi and eta are column vectors and x,y,z row vectors:
+xi=xi(:); eta=eta(:); p=p(:); qx=qx(:);  
+x=x(:)';y=y(:)';z=0;
+% make sure y and z ae same size as x
+% if numel(y)==1
+%     y=y*ones(size(x));
+% end
+% if numel(z)==1
+%     z=z*ones(size(x));
+% end
+% Find dxi and deta
+xi_un=sort(unique(xi));Dxi=xi_un(2)-xi_un(1);
+eta_un=sort(unique(eta));Deta=eta_un(2)-eta_un(1);
+% Turn into matrices:
+N=numel(x);M=numel(xi);
+x=repmat(x,M,1);
+if numel(y)>1
+    y=repmat(y,M,1);
+end
+
+xi=repmat(xi,1,N);eta=repmat(eta,1,N);p=repmat(p,1,N);qx=repmat(qx,1,N);
+
+% calculate values of x-xi etc at the corners of each element:
+x2=x-xi+0.5*Dxi;x1=x-xi-0.5*Dxi;
+y2=y-eta+0.5*Deta;y1=y-eta-0.5*Deta;
+
+
+G=0.5*E/(1+v);  %shear modulus (Johnson uses shear mnodulus ipv Youngs modulus)
+
+%initialize influence functions:
+Dxn=zeros(size(x2));Dyn=Dxn;Dzn=Dxn;Dxt=Dxn;Dyt=Dxn;Dzt=Dxn;
+
+for i=1:4  %Loop over the four corners of the element
+    switch i
+        case 1
+            teken=1;
+            x=x2;
+            y=y2;
+        case 2
+            teken=1;
+            x=x1;
+            y=y1;
+        case 3
+            teken=-1;
+            x=x1;
+            y=y2;
+        case 4
+            teken=-1;
+            x=x2;
+            y=y1;
+    end
+
+    r=sqrt(x.^2+y.^2); 
+
+    % Add integrated influence functions (see Mathematica file InfluenceMatrix (note terms that depend not both on x and y can be omitted as they cancel out).
+    %Gxn:
+    I=(1-2*v)*(-aatanb(x,y./x)-alnb(y,r));
+    Dxn=Dxn+teken*I/(4*pi*G);
+    %Gyn:
+    I=(1-2*v)*(-aatanb(y,x./y)-alnb(x,r));
+    Dyn=Dyn+teken*I/(4*pi*G);
+    %Gzn:
+    I=2*(1-v)*(alnb(y,x+r)+alnb(x,y+r));
+    Dzn=Dzn+teken*I/(4*pi*G);
+    %Gxt:
+    I=(2-2*v)*alnb(x,y+r)+2*alnb(y,x+r);
+    Dxt=Dxt+teken*I/(4*pi*G);
+    %Gyt:
+    I=-2*v*r;
+    Dyt=Dyt+teken*I/(4*pi*G);
+    %Gzt:
+    I=(1-2*v)*(aatanb(x,y./x)+alnb(y,r));
+    Dzt=Dzt+teken*I/(4*pi*G);
+end
+
+uxn=sum(Dxn.*p,1);
+uyn=sum(Dyn.*p,1);
+uzn=sum(Dzn.*p,1);
+uzt=sum(Dzt.*qx,1);
+uxt=sum(Dxt.*qx,1);
+uyt=sum(Dyt.*qx,1);
+un=[uxn',uyn',uzn'];
+ut=[uxt',uyt',uzt'];
+u=un+ut;
+end  %FUNCTION
+
+
+
+
+
+% Define local functions for a*ln(b) and a*atan(b)
+function f = alnb(a,b)
+    EPS=1e-9;
+    f=a;
+    f(abs(a)>EPS)=f(abs(a)>EPS).*log(b(abs(a)>EPS));
+end
+function f = aatanb(a,b)
+    EPS=1e-9;
+    
+    f=a;
+    f(abs(a)>EPS)=f(abs(a)>EPS).*atan(b(abs(a)>EPS));
+end
