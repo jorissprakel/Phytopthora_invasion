@@ -1,0 +1,124 @@
+%This code retrieves the last fitparam value from the monte carlo fitting
+%routine, and feeds it back to thesame code to plot the data + compute the
+%stresses.
+clear all
+%Modulus of material:
+E = 0.56E6;%in Pa units, sylgard 184.
+
+for timestep = 1:85
+        clearvars -except timestep timesteps E force_saving SoS_final_saving Stress_final_saving Stress_final_max_saving
+        load(['Z_Profile_Arb_profile_data_T', num2str(timestep), '.mat']);
+        load(['all_data_T', num2str(timestep), '_10000.mat'])
+        disp(timestep)
+        angle=47; %we fix the angle at the experimentally determined value as it leads to unstable solutions in the fitting
+        timepoint = num2str(timestep);
+        
+        %%we read out the found fitparam values
+        a1=fitparam(1);
+        b1=fitparam(2);
+        a2=fitparam(3);
+        b2=fitparam(4);
+        d=fitparam(5);
+        amp_scale=1; % we keep this value 1.
+        xo=fitparam(7);  %centroid position of indenter head
+
+
+
+        %% Initial calculations
+
+        xexp=([1:size(data_pixels_profiles_mean,2)]-xo)*0.41;   %in microns
+        zexp=data_pixels_profiles_mean_nanometer/1000;   % in um
+        zexp=zexp-nanmean(zexp(end-20:end));
+        zmin=min(zexp);  %deepest indentation
+
+        %% Run fitting to determine profile
+        %Profiles_2regions;
+        try
+            [u, x, S, ST, P]=Profiles_2regions_v2_Revision2(angle,a1,b1,a2,b2,d,xexp);   %calculated profile
+            u=u*fitparam(6);
+            
+            Stress_final_saving{timestep,1} = timestep;
+            Stress_final_saving(timestep,2) = {S};
+            Stress_final_saving(timestep,3) = {ST};
+            Stress_final_saving(timestep,4) = {P};
+            
+            Stress_final_max_saving(timestep,1) = timestep;
+            Stress_final_max_saving(timestep,2) = max(S(:,1));
+            Stress_final_max_saving(timestep,3) = max(S(:,2));
+            Stress_final_max_saving(timestep,4) = max(S(:,3));
+            
+            
+            
+            themap=figure; hold on;
+            scatter(xexp,zexp,50,'o')
+            xlabel('x (um)')
+            ylabel('z (um)') 
+            plot(x,u(:,3),'r-')
+            box on
+            set(gca, 'XDir','reverse')
+            ylim([-3 1])
+            savefig(['fit_T', num2str(timestep), 'stressesRevision2.fig'])
+            print(gcf,'-dtiff', '-r600', [strcat('fit_T',timepoint,'fit_model.tif')]);
+            close all;
+        catch
+        end
+            
+        
+        %plot all 3 components:
+        try
+            S1fig = figure; plot(xexp,S(:,1)); xlabel('x (um)');ylabel('Stress Component 1');
+            title(strcat('Timepoint = ',timepoint,'Component S1'));
+            box on
+            set(gca, 'XDir','reverse')
+            savefig(['fit_T', timepoint, 'stressesS1Revision2.fig'])
+            print(S1fig,'-dtiff', '-r600', [strcat('fit_T',timepoint,'stressesS1Revision2.tif')]);
+            close all
+            S2fig = figure; plot(xexp,S(:,2)); xlabel('x (um)');ylabel('Stress Component 2');
+            title(strcat('Timepoint = ',timepoint,'Component S2'));
+            box on
+            set(gca, 'XDir','reverse')
+            savefig(['fit_T', timepoint, 'stressesS2Revision2.fig'])
+            print(S2fig,'-dtiff', '-r600', [strcat('fit_T',timepoint,'stressesS2Revision2.tif')]);
+            close all
+            S3fig = figure; plot(xexp,S(:,3)); xlabel('x (um)');ylabel('Stress Component 3');
+            title(strcat('Timepoint = ',timepoint,'Component S3'));
+            box on
+            set(gca, 'XDir','reverse')
+            savefig(['fit_T', timepoint, 'stressesS3Revision2.fig'])
+            print(S3fig,'-dtiff', '-r600', [strcat('fit_T',timepoint,'stressesS3Revision2.tif')]);
+            close all
+        catch
+        end
+        
+        
+        %compute compressive forces over the indentive interface directly:
+        % formula provided by jasper:
+%         (2/3)*pi*a*b*E*amp_scale 
+        
+        force_at_timestep = (2/3)*pi*(a1/1E6)*(b1/1E6)*E*fitparam(6);
+        force_saving(timestep,1) = timestep;
+        force_saving(timestep,2) = force_at_timestep;
+        
+        SoS_final_saving(timestep,1) = timestep;
+        SoS_final_saving(timestep,2) = SoS;
+        
+        
+        save(['Finaloutput_T', num2str(timestep),'stressesRevision2.mat']);
+
+        
+end
+save('force_at_indent_all_T.mat','force_saving')
+save('SoS_Final_all_T.mat','SoS_final_saving')
+save('Stresses_Final_all_T.mat','Stress_final_saving')
+save('Stresses_Final_max_all_T.mat','Stress_final_max_saving')
+
+% 
+% 
+% figure, hold on
+% plot(x,u(:,1),'bo-')
+% plot(x,u(:,2),'go-')
+% plot(x,-u(:,3),'ro-')  
+% title('Displacements')
+% xlabel('x')
+% ylabel('u')
+% legend('ux','uy','uz')
