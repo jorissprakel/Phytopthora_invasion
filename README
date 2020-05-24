@@ -140,7 +140,7 @@ After obtaining the displacement profile data, the displacement profile is fitte
 SMARTFIT_computestresses_Revision2_UseThisVersion
 The work function in the script (Profiles_2regions_v2_Revision2, dont forget to switch on the calculate_stresses by setting it to True),
 will plug out the stress data and save it, make plot of all 3 stress components as a funtion of the profile and compoute from the
-found parameters the indentive force via a Hertz equation. Plots are also made and saved.
+found parameters the indentive force via a Hertz equation. Plots of stresses etc are also made and saved.
 
 -----------------------------ANALYSIS OF GFP MAPS (TubeAnalyser)----------------------------------
 
