@@ -1,0 +1,27 @@
+
+% Get a list of all files and folders in this folder.
+% files = dir('F:\P_infestans\Imaging\Jochem Bronkhorst\P Infestans Invasion Project Concurrent Confocal Data\20190903_15xdil_Slabeas_100kPa_PIwt_1');
+files = dir('*RhodamineB');
+% Get a logical vector that tells which is a directory.
+dirFlags = [files.isdir];
+% Extract only those that are directories.
+subFolders = files(dirFlags);
+
+for i=1:size(files,1)
+    wrkspcename2=files(i).name;
+    %load in the workspace    
+    wrkspcefolder2 = pwd;
+    cd(fullfile(wrkspcefolder2,wrkspcename2));
+%     
+%     num_exp = regexp(files(i).name,'[\d]+','match');
+%     num_exp = num_exp{end};
+    
+    tb_copied = 'z_aftertiltcorr_nonrenorm.tiff';
+    newsavename_copierv2 = strsplit(tb_copied,'.');
+    newsavename_copierv2 = strcat(wrkspcefolder2,'\Aggr_displ_ROI1\',newsavename_copierv2{1},'_T',num2str(i),'.tiff');
+    copyfile(tb_copied,newsavename_copierv2)
+    
+    wrkspcename2
+    cd(wrkspcefolder2)
+    clearvars -except i files
+end
