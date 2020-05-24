@@ -1,0 +1,157 @@
+%This code runs a monte carlo type algorithm to optimize a multiparameter
+%mechanical model to experimental data
+
+for timestep = 1:9
+        clearvars -except timestep 
+        load(['Z_Profile_Arb_profile_data_T', num2str(timestep), '.mat']);
+
+        numit=10000; %number of MC iterations to run 
+        angle=47; %we fix the angle at the experimentally determined value as it leads to unstable solutions in the fitting
+        disp(num2str(timestep))
+        
+        % to save all the data at the end:
+        fitparam_all = zeros(numit,9);
+        fitparam_all_old = zeros(numit,7);
+        % encoded errors in 8th numer: 0 for unaccepted move, 1 for
+        % accepted move and 2 for error!
+        
+        %%Start guesses for fitting parameters
+        a1=1.0;
+        b1=0.5;
+        a2=5;
+        b2=1;
+        d=1;
+        amp_scale=1;
+        xo=31;  %centroid position of indenter head
+
+        %% Initial calculations
+
+        xexp=([1:size(data_pixels_profiles_mean,2)]-xo)*0.41;   %in microns
+        zexp=data_pixels_profiles_mean_nanometer/1000;   % in um
+        zexp=zexp-nanmean(zexp(end-20:end));
+        zmin=min(zexp);  %deepest indentation
+
+
+        %Make matrix containing all fit parameters
+
+        fitparam=[a1 b1 a2 b2 d amp_scale xo];
+        deltas=[0.2 0.2 0.2 0.2 0.2 0.2 0.05]; %maximum allowed changes in fit parameters during fitting
+        UpperThreshold = [5 5 10 10 10 10 35]; %maximum values of all paramters, obtained by estimation from data
+        % Using an upper limit on threshold is important in noise fitting
+        % phase.
+        
+        %% Run 1st fitting to determine initial error
+        %Profiles_2regions;
+        [u x]=Profiles_2regions_v2_Revision2(angle,fitparam(1),fitparam(2),fitparam(3),fitparam(4),fitparam(5),xexp);   %calculated profile
+        u=u*amp_scale;
+        soss=[];
+        %umin=min(u(:,3));
+        %u = 1.1*u*zmin/umin;
+
+        %Regular unweighted SoS
+        %SoS=sum((u(:,3)-zexp(:)).^2);
+        %soss=[soss; SoS];
+
+        %Weighted SoS
+        SoS=nansum(((u(:,3)-zexp(:)).*zexp(:)).^2);
+        soss=[soss; SoS];
+
+        
+        %% Run a MC routine which i) selects one of the 6 fitting parameters, ii) makes a small random variation in the fit parameter value, iii) runs the fitting and iv) compares if the change improves the fit quality
+        
+            fitparam_old=fitparam; %intiate
+            for iteration = 1:numit
+                disp(num2str(iteration))
+                fitparam_all_old(iteration,1:7) = fitparam_old;
+                try
+                    sum_of_squares=SoS;
+                    
+                    fitparam_old=fitparam;
+                    for param=1:7
+
+                        newp = fitparam(param) + 2*deltas(param)*(rand(1)-0.5);
+                        if newp>0.01 %make sure we dont have negative numbers by accident
+                        fitparam(param) = newp;
+                        end
+                        if newp>UpperThreshold(param)
+                            fitparam(param) = UpperThreshold(param);
+                        end
+                    end
+                    fitparam_all(iteration,1:7) = fitparam;
+                    xexp=([1:size(data_pixels_profiles_mean,2)]-fitparam(7))*0.41;   %in microns
+
+                    [u x]=Profiles_2regions_v2_Revision2(angle,fitparam(1),fitparam(2),fitparam(3),fitparam(4),fitparam(5),xexp);   %calculated profile
+                    u=u*fitparam(6);
+                    
+                    %unweighted SoS
+                    %SoS_new=sum((u(:,3)-zexp(:)).^2);
+                    
+                    %weighted SoS (larger deformations weigh more)
+                    SoS_new=nansum(((u(:,3)-zexp(:)).*zexp(:)).^2);
+                    fitparam_all(iteration,9)=SoS_new;
+                    disp(['Old:',num2str(SoS),' New:',num2str(SoS_new)])%disp old + new value
+
+                    if SoS_new<=SoS
+                        %If the change improved the fit, we accept the change and
+                        %update the SoS value
+                        SoS=SoS_new;
+%                         figure; hold on
+%                         scatter(xexp,zexp,50,'o')
+%                         xlabel('x (um)')
+%                         ylabel('z (um)') 
+%                         plot(x,u(:,3),'r-')
+%                         savefig(['fit_T', num2str(timestep),'_',num2str(iteration),'.fig'])
+%                         close;
+                        fitparam_all(iteration,8) = 1;
+
+                    else
+                        %If the change worsened the fit, we reject the change and go
+                        %back to the situation before the change. 
+                        chance = exp(1-4*(SoS_new/SoS));
+                        if rand(1)< chance
+                            SoS=SoS_new;
+                            
+                        else
+                            fitparam=fitparam_old;
+
+                        end
+                        soss=[soss; SoS];
+                        
+
+                    end
+                catch
+                    fitparam_all(iteration,8) = 2;
+                    fitparam=fitparam_old;
+
+                    disp('an error has occured')
+                    close;
+                    continue
+                end
+%                 disp(num2str(fitparam_old))
+%                 disp(num2str(fitparam))
+                
+            end
+                
+            
+            save (['all_data_T', num2str(timestep),'_',num2str(iteration),'.mat']);
+            figure; hold on
+            scatter(xexp,zexp,50,'o')
+            xlabel('x (um)')
+            ylabel('z (um)') 
+            plot(x,u(:,3),'r-')
+            savefig(['fit_T', num2str(timestep),'_',num2str(iteration),'.fig'])
+            close;
+                    
+end
+
+
+
+
+% figure, hold on
+% plot(x,u(:,1),'bo-')
+% plot(x,u(:,2),'go-')
+% plot(x,-u(:,3),'ro-')  
+% title('Displacements')
+% xlabel('x')
+% ylabel('u')
+% legend('ux','uy','uz')
