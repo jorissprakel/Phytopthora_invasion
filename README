@@ -25,7 +25,7 @@ Don't forget to manually adjust these settings when analysing a new sample, any 
 manually. The code loads in 2 z-stacks, saves the .param containing the coordinates of the Field Of View in the present working directory.
 The parameters.mat file containing the .param is used to generate the correct ROI window. The window and position are saved as a crude
 image in this code as well, making a quick assesment of the chosen ROI possible.
-The follwoing code uses the .param file and raw images to generate folders with the reuired data for sigmoidal analysis from the present .tif files:
+The follwoing code uses the .param file and raw images to generate folders with the required data for sigmoidal analysis from the present .tif files:
 NFM_SigmoidalFit_PrepareData_v2ROI
 This codes uses the parameters.mat file containg the .param struct, as generated in ROI_definer to generate ROIs to analyse sigmoidally.
 ROIs are much smaller then their parent full FOV, resulting in a much faster analysis. 
@@ -70,11 +70,23 @@ Data is then saved, and the work function is complete.
 IMPORTANT: the work function requires the highly popular cbrewer colourmaps, downloadable from:
 https://nl.mathworks.com/matlabcentral/fileexchange/34087-cbrewer-colorbrewer-schemes-for-matlab
 
-Analysis of displacement images -> profiles
+After this process, either for ROIs or full frames (if the ROI selected is the whole frame of view) each stack has been analysed
+as a separate timestep. Each folder contains the data to be analysed, parameters and output data. This organisation is convenient from
+an analytical point of view: all the data for each timestep is grouped together. For making a movie etc of all displacement maps this is
+however incredibly inconvenient, for which the "NFM_SigmoidalFit_Data_afteranalysis_Copierv2" code was written:
+This code searches in the present working directory (ensure that this is the ROIXXX folder) for folders (where the data is saved),
+copies the post-curvature correction image ('z_aftertiltcorr_nonrenorm.tiff') to the saving folder and that is it.
+It is IMPORTANT that the dir list to index the folders is in the CORRECT ORDER!
+Other versions of this code have been made to copy different types of file, please feel free to use this code structure and to expand!
 
-Another 
+Another code to generate called 'NFM_SigmoidalFit_Data_GFP_moviemaker' was made,
+which is employed in the directory of the original data folder. It works much like the "NFM_SigmoidalFit_PrepareData_v2ROI" code 
+(and reqiures a parameters.mat file!), but instead of making a lof of new directories it saves the images directly in 2 versions:
+- a full stack average of the ROI
+- a selected average (slice input can be governed) of the ROI. Can be useful to filter out top or bottom noise/increase contrast.
+The savetarget selects the savind directory, I recommend saving directly into a subfolder of the previously generated ROI Folder
+called 'TD' or 'GFP', making it easy to generate a good field of view movie together with the displacement data.
 
-Generate
 
 ---------------------------------------------------------------
 
