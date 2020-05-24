@@ -1,0 +1,173 @@
+%% Profile Extraction and averaging from grayscale image %%
+
+clear all
+
+%% Load in %%
+
+% manually select the file containing the image (Can be automated by functionalising), assumes
+% a .mat dump of the workspace!!
+% [file_arb,path_arb] = uigetfile('*.mat', 'Select a file for analysis');
+[file_arb,path_arb] = uigetfile('*PMT2.tif', 'Select a file for analysis');
+
+
+% load in the file
+% load([path_arb, file_arb]);
+
+% Change to path directory
+cd(path_arb);
+
+% Display file name that is loaded
+disp(strcat(['Analysing ',file_arb,' from path ',path_arb]));
+
+% My imagemap is saved in zpos_FPL_final
+% Change this to be your image :)
+% image_tb_analy = zpos_FPL_final_ROI;
+
+% If the data is a .tiff z-stack
+img_tb_analy_info = imfinfo(file_arb);
+img_tb_anly_stack_size = numel(img_tb_analy_info(:,1));
+for i=1:img_tb_anly_stack_size
+    img_tb_analy(:,:,i) = imread(file_arb,i);
+end
+image_tb_analy = mean(img_tb_analy,3);
+% image_tb_analy = imread([path_arb, file_arb]);
+% For GFP/Spiro analysis:
+% image_tb_analy = Topview;
+
+% Convert to grayscale if needed here!
+
+
+%% Select the line in the image %%
+
+% Plot the image, select an area from it
+% figure; activate me
+ imagesc(image_tb_analy);
+% % caxis([-3 3])
+ title('Leftclick to generate line. Backspace to remove points. Close by pressing enter or right-click.')
+ positions_line=getline(gcf);
+ close(gcf);
+
+% Consistency check, select only first 2 positions (line of profile)
+ %positions_line = positions_line(1:2,1:2); %activate me
+positions_line = [[4.827983425414364e+02,1.877149532710281e+02;4.318812154696132e+02,59.714953271028094]];%For plot profile publication deactivate me
+
+%% Generate positions on the image %%
+
+% Number of pixels perpendicular to analyse
+% n_pixels_side = input('How many pixels should be take to average? (total
+% = 2xlarger) Press enter to confirm.'); %activate me
+% Hard code this if that is neccesary
+n_pixels_side = 20; %deactivate me
+
+% some checks
+if isstring(n_pixels_side) == true
+    disp('No number was provided')
+    n_pixels_side = 3; %Use this
+end
+
+% Generate positions
+% taken from: https://math.stackexchange.com/questions/2767319/calculate-coordinates-of-a-point-at-90-degrees-from-a-line
+v_y = positions_line(2,2)-positions_line(1,2);%difference in y positions
+v_x = positions_line(2,1)-positions_line(1,1);%difference in x positions
+diff_triangle = sqrt(v_x^2+v_y^2);
+
+newpos_x_up = (-1*v_y/diff_triangle)+positions_line(1,1); % in the arbitraty up direction
+newpos_y_up = (v_x/diff_triangle)+positions_line(1,2); % in the arbitrary up direction
+
+shift_amount_up_x = (-1*v_y/diff_triangle); %distance in x to be translated over in pixels
+shift_amount_up_y = (v_x/diff_triangle); %distance in y to be translated over in pixels
+
+% Loop over n_pix
+
+% Column order: x1, y1, x2, y2
+data_pixels = nan(2*n_pixels_side+1,4);
+% insert original data in the centre
+data_pixels(n_pixels_side+1,1:2) = positions_line(1,:);
+data_pixels(n_pixels_side+1,3:4) = positions_line(2,:);
+
+% Generate the data to fill until:
+matrix_top = repmat(fliplr(1:n_pixels_side)',1,4);
+% for the first and third column (x), multiply with shift amount up x
+x_shift = fliplr(1:n_pixels_side)'*shift_amount_up_x;
+matrix_top(:,1) = x_shift+positions_line(1,1);
+matrix_top(:,3) = x_shift+positions_line(2,1);
+% for the second and last column (y), multiply with shift amount up y
+y_shift = fliplr(1:n_pixels_side)'*shift_amount_up_y;
+matrix_top(:,2) = y_shift+positions_line(1,2);
+matrix_top(:,4) = y_shift+positions_line(2,2);
+% Append to the top of the data_pixels matrix with these positions
+data_pixels(1:n_pixels_side,:) = matrix_top;
+
+% now the underfill starts, in thesame manner (but every shift gets* -1 and is in reversed order)
+% Generate the data to fill below:
+matrix_bottom = repmat([1:n_pixels_side]',1,4);
+% for the first and third column (x), multiply with shift amound down x
+x_shift_down = [1:n_pixels_side]'*-1*shift_amount_up_x;
+matrix_bottom(:,1) = x_shift_down+positions_line(1,1);
+matrix_bottom(:,3) = x_shift_down+positions_line(2,1);
+% for the third and last column (y), multiply with shift amound down y
+y_shift_down = [1:n_pixels_side]'*-1*shift_amount_up_y;
+matrix_bottom(:,2) = y_shift_down+positions_line(1,2);
+matrix_bottom(:,4) = y_shift_down+positions_line(2,2);
+% Append the bottom of the data_pixels matrix with these positions
+data_pixels(n_pixels_side+2:end,:) = matrix_bottom;
+
+% Point generation should now be done :)
+
+%% Make the plot with the points to check! %%
+
+figure; hold on;
+imagesc([1:size(image_tb_analy,2)],[-1.*[1:size(image_tb_analy,1)]],(image_tb_analy))
+colormap gray
+% Plot original points
+plot(positions_line(1,1),-positions_line(1,2),'b+','MarkerSize', 10);%first
+plot(positions_line(2,1),-positions_line(2,2),'b+','MarkerSize', 10);%second
+%plot first set of data
+for i=1:size(data_pixels,1)
+    if i ~= ceil(size(data_pixels,1)/2)
+        plot(data_pixels(i,1),-data_pixels(i,2),'r+', 'MarkerSize', 10);
+        plot(data_pixels(i,3),-data_pixels(i,4),'r+', 'MarkerSize', 10);
+    end
+    line([data_pixels(i,1),data_pixels(i,3)],[-data_pixels(i,2),-data_pixels(i,4)])
+end
+
+% Find the amount of previous entries in the current folder:
+n_plots_before = size(dir('Arb_Prof_*'),1)/3; %devide to ensure next entry label is 2
+print(gcf,'-dpng', '-r600', [strcat('Arb_Prof_',num2str(n_plots_before+1) ,'.png')]);
+
+% Zoom into the correct image
+xmin = min(min(data_pixels(:,1)),min(data_pixels(:,3)))-5;
+ymin = -1*(min(min(data_pixels(:,2)),min(data_pixels(:,4)))-5);
+xmax = max(max(data_pixels(:,1)),max(data_pixels(:,3)))+5;
+ymax = -1*(max(max(data_pixels(:,2)),max(data_pixels(:,4)))+5);
+axis([xmin xmax ymax ymin])
+
+% Find the amount of previous entries in the current folder:
+print(gcf,'-dpng', '-r600', [strcat('Arb_Prof_Zoom',num2str(n_plots_before+1) ,'.png')]);
+close()
+
+%% Extract the image profiles %%
+
+data_pixels_profiles = [];
+
+for j=1:size(data_pixels,1)
+    data_pixels_profiles(j,:) = improfile(image_tb_analy,[data_pixels(j,1),data_pixels(j,3)],[data_pixels(j,2) data_pixels(j,4)]);
+end
+
+% Mean this data
+data_pixels_profiles_mean = nanmean(data_pixels_profiles);
+data_pixels_profiles_mean_nanometer = 1000*data_pixels_profiles_mean;
+
+% Plot the data
+figure;
+scatter([1:size(data_pixels_profiles_mean,2)],data_pixels_profiles_mean_nanometer,30,'x')
+xlabel('Distance along line (in pixels)')
+ylabel('Displacement distance (nanometers)') %microns is my lengthscale, depends upon sample!
+% ylabel('Displacement profile (a.u.)')
+title('Displacement Profile')
+box on
+% Find the amount of previous entries in the current folder:
+print(gcf,'-dpng', '-r600', [strcat('Arb_Prof_Plot',num2str(n_plots_before+1) ,'.png')]);
+close()
+
+save(strcat('Arb_profile_data_',num2str(n_plots_before+1),'.mat'),'data_pixels_profiles_mean','data_pixels_profiles','positions_line','data_pixels','image_tb_analy','data_pixels_profiles_mean_nanometer')
