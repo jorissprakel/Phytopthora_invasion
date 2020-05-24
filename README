@@ -144,8 +144,64 @@ found parameters the indentive force via a Hertz equation. Plots are also made a
 
 -----------------------------ANALYSIS OF GFP MAPS (TubeAnalyser)----------------------------------
 
-Next to profile analysis of the GFP map, similar profile analysis can be performed starting from the GFP data.
+Next to profile analysis of the GFP map, similar profile analysis can be performed starting from the GFP data. 
+To select a spot for analysis, first a code called 'Intensity_profile' is run. 
+This code is much like the Code_Arb_Profile_Avg_v2_MinMaxROI_V2, but does not automatically search for a image and gets the positions.
+Instead, this version allows manual selection of the file to be analysed, and manual placement of the start and endpoint of the profile.
+In our studies usually placed the start behind the cyst, and the stop past the apex of the germ tube tip in the last timepoint measured.
+Similar to ROI_definer, the most important data from this operation are the positions_line and n_pixels_side parameters, describing
+both the position of the to be analysed region and the amount of lines to take to the side (width of the data later). The stardardisation
+of anlaysis direction plus this script ensure that the dataset is correctly oriented when analysing in later scripts:
+cyst to the left, germ tube germinating to the right direction and everything is in the frame.
 
+After selection of the correct spot, this part of the Intensity_profile was commented out and the found parameters were directly
+used as input without asking the user at each iteration. To buid up all the data for analysis, the code was run manual while selecting
+the first stack to the last (this is quite laborius!). Although we considered automating this, we never did it beause the students
+working with the data did not mind doing these steps. I do wish to encourage others in the future to do so, all elements needed can be
+found in the codes above (index on the _GFP images, run loop over each image and correct site, save data for each timestep)
 
+To save the correct positions (expand the list for multiple samples!), we chose to save this data in a text file in the following format:
+(as taken from 200122linepos.txt files)
+[name] [no_pixels_side] [positions_line]
+ROI 1: pixel size: 20 [3.196152073732719e+02,95.287172011661820;3.727027649769585e+02,1.893279883381924e+02]
 
+After converting all raw GFP images to a analysed region and saving, the code 'From_ArbProfileData_GermTubeSelect_Analysis_Step2' 
+was run. This code:
+-indexes all arb_profile....mat data
+-finds the last sample (germ tube final position)
+-manual selection of site of background (rectangle) to be analysed in each frame
+-then we start the loop:
+-load in the raw GFP intensity map
+-cut out the selected site for background anlaysis
+-fit lognormal to intensity distribution of background
+-from fit, retrieve sigma (average) and mu (st. devation)
+-generate binarization criterion (exp(mu+sigma_number*sigma)), usual sigma_number is 3.
+-create a binarised mask (used later as input for TubeAnalyser)
+-save data and repeat loop until done. (the weighed_thickness.mat file contains all of the intensity and binarised maps)
+
+When all of the binarised maps have been made, we have automatically edge detected the cell position. 
+This is used as inputdata for the From_ArbProfileData_GermTubeSelect_Analysis_Step3_TubeAnalyser:
+-index all of the weighied_thickness datafiles to loop over them
+-before the loop starts, we declare the start positon of the germ tube in the x direction, and the minimum tube length before we
+consider it before analysis.
+-then we loop over the data:
+-load in the intensity/binarised maps
+-using bwmorph, smooth and thin the germ tube to a centre line (euler conserved, so no breaks in the line!)
+-multiply the binarised map and the intensity map -> all intensities not on a binerised site will not be used for averageing of
+germ tube intensity, effectively filtering out background (although this signal is much weaker then the GFP, usually by a factor of 10)
+-In the new intensity map, check if the length of the found centre line is longer then the minimum distance
+-if so, we follow the line from left (smallest x) to right, gnerating coordinates of this site and the x+distance site for local
+intensity analysis.
+-local intensity analysis is done by the work function Code_Arb_Profile_Avg_complete_function, returning an intensity for this small
+segment, which is averaged to 1 intensity for this x position.
+-then we loop to the next position, until we have reached the last_x-distance, after which we cannot know the coordinates.
+-The data obtained after the loop is an intensity profile of the tube, localised on the tube.
+-This data we then analyse for several parameters and plot
+-the important parameter is alpha, which is defined as: 
+mean(intensity of points starting from minimum tube length)/max intensity found in the tube)-1.
+We found alpha to be a good measure for the polarity in the tube; no polarity=0, high polarity was usually around 1.
+-The code finishes with creating quite a few plots and saving data, the plots being the confirmation that the correct sites etc were analysed.
+the start positon of the germ tube can be tricky, it will take a few tries usually to get this right. I personalyl try the last timestep
+to asses where I would place this point, and then asses if there is major cyst movement after germination of the germ tube. If so,
+finding a balance can be tricky, although after the start of invasion the cyst movement is minimal.
 
