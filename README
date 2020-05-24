@@ -123,6 +123,12 @@ Within this function is an option to compute stresses as well as a reconstrcutio
 because it is not needed to asses the goodness of fit. DONT FORGET to turn the calculate_stresses = True when running the 
 SMARTFIT_computestresses_Revision2_UseThisVersion script, otherwise no stress data will be the result of the function. The computation
 for stresses can be quite laborius, usually taken about 1 hour for 70 timesteps for the data in this paper.
+The following work functions needed for Profiles_2regions_v2_Revision2 are added in this depository:
+-HertzianDisplacementProfile_Revision2
+-Stresses_Revision2
+-SurfaceDisplacementProfileFromForceDistribution
+-DisplacementProfileFromForceDistribution
+Please contact joris.sprakel@wur.nl/jasper.vandergucht@wur.nl for further comment on the functioning of these work functions.
 
 After obtaining the displacement profile data, the displacement profile is fitted using the code:
 'smartfit_try_catch_withreverse_v3_allfitparam_at_once_UpThresh'
