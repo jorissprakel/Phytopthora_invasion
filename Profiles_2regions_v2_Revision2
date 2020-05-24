@@ -1,0 +1,119 @@
+function [u, x, S, ST, P]=Profiles_2regions_v2_Revision2(angle,a1,b1,a2,b2,d,xexp)
+
+% Calculate displacement/stress profile for a surface pressure consisting
+% of two regions (both elliptical in shape):
+% 1: the indentation site with downward force under certain angle
+% 2: the adhesion site in which the total force equals minus the total
+% indentation force (to ensure mechanical balance)
+%
+% Components due to normal and tangential forces are stored separately, so
+% that other angles can be studied simply as u(phi)=un*cos(phi)+ut*sin(phi)
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% PARAMETERS:
+
+v=0.45;      % Poisson ratio
+E=1;        % modulus
+delta=0.05; % indentation depth (related to maximum pressure)
+%angle=45;   % angle of indentation (0 means perpendicular to surface, 
+            % 90 means in direction of surface to the LEFT)
+           
+%Size of contact regions (ellipse with length a (x-dir) and with b (y-dir))
+%  Region 1 (indentation site):
+%a1=0.9;       % contact radius circular indentation site
+%b1=0.9;       % same: circular site
+xc1=0;      % center of the indentation site
+yc1=0;
+% Region 2 (adhesion site):
+include_region2=true;  
+% width, height by jochem:
+%a2 = 5;
+%b2 = 0.4;
+
+%d=1;        % distance between edges of the two regions
+yc2=0;
+% x-range where displacement is calculatesd:
+xmin=-10;
+xmax=25;
+  
+calculate_stresses=true;
+
+% y and z where displacement is calculated
+y=0;
+z=0;
+
+N=150;       % Number of x-points
+M=60;      % Number of integration points along axis of contact area
+D=0.02*a1;  % delta x needed to evaluate numerical derivative
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% End parameter input
+
+%center of second site:
+xc2=xc1+a1+d+a2;
+
+% x-values:
+% xmin=xc1-xR;
+% xmax=xc2+a2+(xR-a1);
+% if ~include_region2
+%     xmax=xc1+xR;
+% end
+
+
+x=xexp;
+dx = xexp(2)-xexp(1);
+%dx=(xmax-xmin)/(N-1);           % spacing between calculated points
+%x=[xmin:dx:xmax];  
+
+%NOTE: HIER INLADEN EXPERIMENTELE XPOSITIES
+
+% Calculate displacement profile due to first region:
+% First calculate for po=qo=1
+% Displacement is proportional to applied pressure, so can be multiplied 
+% later!
+
+P=1;Q=1; % P is the force normal force vector downwards, Q is thesame vector to the left
+[u1,un1,ut1] = HertzianDisplacementProfile_Revision2(x,y,z,a1,b1,xc1,yc1,P,Q,M,E,v);                                    
+if include_region2
+    [u2,un2,ut2] = HertzianDisplacementProfile_Revision2(x,y,z,a2,b2,xc2,yc2,P,Q,M,E,v);
+    %u=u1+u2; un=un1+un2; ut=ut1+ut2;
+else
+    u2=0;un2=0;ut2=0;%u1;un=un1;ut=ut1;
+end
+
+
+f=tan(angle*pi/180);        %ratio Ftang/Fnorm
+po1=1;
+qo1=-f*po1;
+if abs(f)>1000  % only tangential force
+    qo1=-1*sign(f);
+    po1=0;
+end
+po2=-a1*b1*po1/(a2*b2);   %force balance
+qo2=-a1*b1*qo1/(a2*b2);
+
+un=po1*un1+po2*un2;
+ut=qo1*ut1+qo2*ut2;
+u=un+ut;
+u(:,3)=-u(:,3);  % so that indentation means negative uz
+
+if calculate_stresses
+    [s1,sn1,st1] = Stresses_Revision2(x,y,a1,b1,xc1,yc1,P,Q,M,E,v,D) ;
+    if include_region2
+        [s2,sn2,st2] = Stresses_Revision2(x,y,a2,b2,xc2,yc2,P,Q,M,E,v,D) ;
+        %s=s1+s2;sn=sn1+sn2;st=st1+st2;
+    else
+        s2=0;sn2=0;st2=0;%s=s1;sn=sn1;st=st1;
+    end
+    sn=po1*sn1+po2*sn2;
+    st=qo1*st1+qo2*st2;
+    s=sn+st;
+    S=zeros(numel(x),3);
+
+    for i=1:numel(x)
+        %P=roots([1,I1(i),I2(i),I3(i)]);
+        ST=[s(i,1),s(i,4),s(i,5);s(i,4),s(i,2),s(i,6);s(i,5),s(i,6),s(i,3)];
+        P=eig(ST);
+        S(i,:)=sort(P(:)');
+    end
+end
