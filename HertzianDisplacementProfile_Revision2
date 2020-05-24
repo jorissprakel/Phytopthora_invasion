@@ -1,0 +1,40 @@
+function [u,un,ut] = HertzianDisplacementProfile_Revision2(x,y,z,a,b,xc,yc,po,qo,M,E,v) 
+
+% Calculate the displacement profile at the points given by x, y, and z
+% for a Hertzian pressure/traction distribution on an elliptical region
+% (with axes a in x-direction and b in y-direction) centered at xc,yc. 
+% Pressure is given as 
+% p(xi,eta)=po*sqrt(1-(xi/a).^2-(eta/b).^2) (normal pressure)
+% qx(xi,eta)=qo*sqrt(1-(xi/a).^2-(eta/b).^2) (tangential stress in
+% x-direction)
+% with xi=x-xc and eta=y-yc
+% E is Young's modulus, v Poisson ratio
+%
+% Output is matrix u = [ux, uy, uz]   (Nx3 matrix)
+% plus matrices un and up for components due to normal and tangential force
+% The coordinates x, y and z are Nx1 vectors 
+% M is the number of points along each axis for the numerical integration
+
+% Create mesh:
+Dxi=a/M;
+Deta=b/M;
+
+xx=[-a+0.5*Dxi:Dxi:a-0.5*Dxi];
+yy=[-b+0.5*Deta:Deta:b-0.5*Deta];
+[X,Y]=meshgrid(xx,xx);
+X=reshape(X,numel(X),1);
+Y=reshape(Y,numel(Y),1);
+
+xi0=X(X.^2/a^2+Y.^2/b^2<1);
+eta0=Y(X.^2/a^2+Y.^2/b^2<1);
+
+% Pressure distributions:
+p=po*sqrt(1-(xi0/a).^2-(eta0/b).^2);
+qx=qo*sqrt(1-(xi0/a).^2-(eta0/b).^2);
+% xi,eta,p matrices:
+xi=[xc+xi0]; eta=[yc+eta0]; 
+if z==0
+    [u,un,ut] = SurfaceDisplacementProfileFromForceDistribution(x,y,xi,eta,p,qx,E,v);
+else
+    [u,un,ut] = DisplacementProfileFromForceDistribution(x,y,z,xi,eta,p,qx,E,v);
+end
