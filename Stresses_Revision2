@@ -1,0 +1,86 @@
+
+function [s,sn,st] = Stresses_Revision2(x,y,a,b,xc,yc,po,qo,M,E,v,D) 
+ 
+% Calculate the strains
+% For d/dx and d/dy: profile is calculated for x-0.5D and x+0.5D
+% so dui/dx=(ui(x+0.5D)-ui(x-0.5D))/D and same for y
+% for d/dz: derivative of Boussinesq force is  calculated analytically
+% first
+
+%
+% Output is matrix u = [uxx, uxy,uxz,uyx,uyy,uyz,uzx,uzy,uzz]   (Nx9 matrix)
+% plus matrices un and up for components due to normal and tangential force
+% The coordinates x, y and z are Nx1 vectors 
+% M is the number of points along each axis for the numerical integration
+
+G=0.5*E/(1+v);
+% Create mesh:
+Dxi=a/M;
+Deta=b/M;
+xx=[-a+0.5*Dxi:Dxi:a-0.5*Dxi];
+yy=[-b+0.5*Deta:Deta:b-0.5*Deta];
+[X,Y]=meshgrid(xx,xx);
+X=reshape(X,numel(X),1);
+Y=reshape(Y,numel(Y),1);
+xi0=X(X.^2/a^2+Y.^2/b^2<1);
+eta0=Y(X.^2/a^2+Y.^2/b^2<1);
+% Pressure distributions:
+p=po*sqrt(1-(xi0/a).^2-(eta0/b).^2);
+qx=qo*sqrt(1-(xi0/a).^2-(eta0/b).^2);
+% xi,eta,p matrices:
+xi=[xc+xi0]; eta=[yc+eta0]; 
+ 
+% CALCULATE uxx and uyy by numerical derivatives
+% First, Dux:
+xdx=x+0.5*D;
+[udxp,undxp,utdxp] = SurfaceDisplacementProfileFromForceDistribution(xdx,y,xi,eta,p,qx,E,v);
+xdx=x-0.5*D;
+[udxm,undxm,utdxm] = SurfaceDisplacementProfileFromForceDistribution(xdx,y,xi,eta,p,qx,E,v);                            
+Dux=(udxp-udxm)/D;Duxn=(undxp-undxm)/D;Duxt=(utdxp-utdxm)/D;
+% Then Duy=[uxy,uyy,uzy]:
+ydy=y+0.5*D;
+[udyp,undyp,utdyp] = SurfaceDisplacementProfileFromForceDistribution(x,ydy,xi,eta,p,qx,E,v);                                   
+ydy=y-0.5*D;
+[udym,undym,utdym] = SurfaceDisplacementProfileFromForceDistribution(x,ydy,xi,eta,p,qx,E,v);                             
+Duy=(udyp-udym)/D;Duyn=(undyp-undym)/D;Duyt=(utdyp-utdym)/D;
+
+%Due to normal force
+
+ 
+szn=-po*sqrt(1-((x-xc)/a).^2-((y-yc)/b).^2);
+szn(((x-xc)/a).^2-((y-yc)/b).^2>1)=0;
+szn=szn(:);
+%r=r(:);
+
+%szn=0*x(:);
+%szn(r<a)=-(po/a)*sqrt(a^2-r(r<a).^2);
+sxn=(E*Duxn(:,1)+v*(1+v)*szn+v*E*Duyn(:,2))/(1-v^2);
+syn=E*Duyn(:,2)+v*(sxn+szn);
+sxyn=G*(Duxn(:,2)+Duyn(:,1));
+sxzn=0*sxyn;
+syzn=0*sxyn;
+
+%Due to tangential force
+szt=0*x(:);
+sxt=(E*Duxt(:,1)+v*E*Duyt(:,2))/(1-v^2);
+syt=E*Duyt(:,2)+v*sxt;
+sxyt=G*(Duxt(:,2)+Duyt(:,1));
+sxzt=0*sxyn;
+
+sxzt=-qo*sqrt(1-((x-xc)/a).^2-((y-yc)/b).^2);
+sxzt(((x-xc)/a).^2-((y-yc)/b).^2>1)=0;
+sxzt=sxzt(:);
+syzt=0*sxyn;
+
+sn=[sxn,syn,szn,sxyn,sxzn,syzn];
+st=[sxt,syt,szt,sxyt,sxzt,syzt];
+s=sn+st;
+
+ 
+ 
+%if z==0
+%    [u,un,ut] = SurfaceDisplacementProfileFromForceDistribution(x,y,xi,eta,p,qx,E,v);
+%else
+    %[u,un,ut] = DisplacementProfileFromForceDistribution(x,y,z,xi,eta,p,qx,E,v);
+%end
+
