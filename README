@@ -79,18 +79,47 @@ copies the post-curvature correction image ('z_aftertiltcorr_nonrenorm.tiff') to
 It is IMPORTANT that the dir list to index the folders is in the CORRECT ORDER!
 Other versions of this code have been made to copy different types of file, please feel free to use this code structure and to expand!
 
+To copy the zpos_final output data from each timestep, a version of the code of the paragraph above was used called:
+'Data_Extraction_for_displacements' This is imporant for displacement analysis, to have all the workspace data in 1 folder!
+
 Another code to generate called 'NFM_SigmoidalFit_Data_GFP_moviemaker' was made,
 which is employed in the directory of the original data folder. It works much like the "NFM_SigmoidalFit_PrepareData_v2ROI" code 
-(and reqiures a parameters.mat file!), but instead of making a lof of new directories it saves the images directly in 2 versions:
+(and requires a parameters.mat file!), but instead of making a lof of new directories it saves the images directly in 2 versions:
 - a full stack average of the ROI
 - a selected average (slice input can be governed) of the ROI. Can be useful to filter out top or bottom noise/increase contrast.
 The savetarget selects the savind directory, I recommend saving directly into a subfolder of the previously generated ROI Folder
 called 'TD' or 'GFP', making it easy to generate a good field of view movie together with the displacement data.
 
+-----------------------------ANALYSIS OF DISPLACEMENT MAPS----------------------------------
 
----------------------------------------------------------------
+After computing all of the displacement maps of to be analysed ROI, analysis can be performed. We have chosen in this study to focus
+on the displacement profiles, drawing a line from highest adhesion point to deepest indentation point and expanding it.
+After obtaining the profile data, we can fit it in a model for the surface displacement!
+
+For the displacement analysis, first we look into the ROI to asses how to draw a profile over the found displacement map (zpos_final).
+This was done using the code: Code_Arb_Profile_Avg_v2_MinMaxROI_V2. This code:
+-Indexes all of the worksapces with displacement data
+-in each folder, loads in the workspace (zpos_final, if not included, it will load it seperately, check this!)
+for the loading of the workspace, all of them must be present in a single folder to be indexed!!!!
+-when running for the first time, select the subwindow as described in lines 68!!!! Subwindow ensures high positions from dead
+autofluorescent cells that have no physical meaning are not locked on by this code. Good ROI selection at the start helps.
+-In the subwindow, the code searches for the highest and lowest points (exect found points to jump around when no indentation is
+yet present, upon indentation it tracks really well).
+-This vector is expanded with 30 points in both directions to generate startpoints and endpoints for the analysis
+-A number of points to the side is declared (10 is standard, but please adjust to the sample size)
+-For each point a line is drawn, and a diagram of this is plotted (Z_profile_TXXXnormal.png) 
++ zoom-in image of ROI (Z_profile_TXXXzoom.png)
+-Extract the profile data taken
+-save plots of the data etc.
+Due to the difference of plotting maps using either imagesc vs implot/scatter, the ydirection of images can become flipped. 
+Take this into account when making movies later on -> I personally flipped the direction back in ImageJ (Fiji) to compensate.
+It is important to update select_ROI_position_round=[x,y,width,height] (width, height are perhaps flipped) to the ROI sto be analysed!
+Again, this code requires cbrewer colourmaps.
+
+After obtaining the 
+
+
+-----------------------------ANALYSIS OF GFP MAPS----------------------------------
 
 Analysis of intensity profiles of eGFP data of LifeAct-eGFP cells
-
-
 
