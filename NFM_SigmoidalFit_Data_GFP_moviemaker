@@ -1,0 +1,67 @@
+listImgGFP= dir('*T*TD.tif');
+% load('parameters.mat');
+savetarget = 'E:\P_infestans\Imaging\Jochem Bronkhorst\P Infestans Invasion Project Concurrent Confocal Data\20190905_15xdil_Slabmeas_100kPa_PIwt_2';
+
+for i=1:size(listImgGFP,1)
+    oldfoldername = listImgGFP(i).folder;
+    oldsavename = fullfile(listImgGFP(i).folder,listImgGFP(i).name);
+%     
+%     newsavenamesplit = regexp(listImgGFP(i).name,'[0-9]','match');
+%     newsavenamesplit = cell2mat(newsavenamesplit); %extract the number of the picture
+    newsavenamesplit = i;%if the order of ListImgGFP is correct
+    newsavename = strcat(savetarget,'\TD_T',num2str(newsavenamesplit),'_');
+
+    img_info = imfinfo(oldsavename);
+    tiff_sizex = img_info.Width; %x size of the stack
+    tiff_sizey = img_info.Height; %y size of the stack
+    tiff_sizez = numel(img_info); %height of the stack
+
+    % Display file names that are analysed
+    disp(strcat(['Analysing ',oldsavename,' from path ',oldfoldername]));
+
+    %create the image stack in double format
+    counter=1;
+    FPL=nan(tiff_sizex,tiff_sizey,tiff_sizez);
+
+    for k = 1:tiff_sizez
+        A = double(imread(oldsavename, k));
+        FPL(:,:,counter)=A;
+        counter=counter+1;
+    end
+    
+    FPL_total=sum(FPL,3);
+    FPL_midpoint=mean(FPL(:,:,20:30),3);
+    
+    ROI_width = param.width;
+    ROI_height = param.height;
+    ROI_xmin = param.ROI_xmin;
+    ROI_ymin = param.ROI_ymin;
+    
+    FPL_total_ROI = FPL_total(ROI_ymin:ROI_ymin+ROI_height,ROI_xmin:ROI_xmin+ROI_width);
+    FPL_midpoint_ROI = FPL_midpoint(ROI_ymin:ROI_ymin+ROI_height,ROI_xmin:ROI_xmin+ROI_width);
+
+    imagesc(1:param.xy_pixel_true:param.xy_pixel_true*numel(FPL_total_ROI(1,:)),1:param.xy_pixel_true:param.xy_pixel_true*numel(FPL_total_ROI(:,1)),FPL_total_ROI);
+    axis equal
+    axis ([1 param.xy_pixel_true*numel(FPL_total_ROI(1,:)) 1 param.xy_pixel_true*numel(FPL_total_ROI(:,1))])
+    axis tight
+    axis off
+%     colormap parula
+%     print(gcf,'-dtiff', '-r600', [strcat(newsavename,'ROIimageParula.tif')]);
+    colormap gray
+    print(gcf,'-dtiff', '-r600', [strcat(newsavename,'ROIimageGrayCompleteZ.tif')]);
+    pause(0.5);
+    close all
+    
+    imagesc(1:param.xy_pixel_true:param.xy_pixel_true*numel(FPL_midpoint_ROI(1,:)),1:param.xy_pixel_true:param.xy_pixel_true*numel(FPL_midpoint_ROI(:,1)),FPL_midpoint_ROI);
+    axis equal
+    axis ([1 param.xy_pixel_true*numel(FPL_midpoint_ROI(1,:)) 1 param.xy_pixel_true*numel(FPL_midpoint_ROI(:,1))])
+    axis tight
+    axis off
+%     colormap parula
+%     print(gcf,'-dtiff', '-r600', [strcat(newsavename,'ROIimageParula.tif')]);
+    colormap gray
+    print(gcf,'-dtiff', '-r600', [strcat(newsavename,'ROIimageGrayZ_20_to_30.tif')]);
+    pause(0.5);
+    close all
+    
+end
