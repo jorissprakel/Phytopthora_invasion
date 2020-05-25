@@ -1,0 +1,112 @@
+%% aggregator script
+
+clear all
+clc
+%intialize total vector
+TotalVector = [];
+FirstVector = [];
+MeanVector = [];
+%select variable to extract
+myvars = 'AngleVector';
+%maybe a ui to select which variable to extract at the start 
+
+%% Create a while loop at some point
+
+%Manual
+% file = 1
+% while file
+%     %select file
+%     [file, path] = uigetfile('.mat');
+%     cd(path)
+%     %load variable from file
+%     load(file, myvars);
+%     %add to total vector
+%     TotalVector = [TotalVector; AngleVector];
+% end
+
+%Automatic
+%select top folder
+topLevelFolder = uigetdir();
+% Get list of all subfolders.
+allSubFolders = genpath(topLevelFolder);
+% Parse into a cell array.
+remain = allSubFolders;
+listOfFolderNames = {};
+while true
+	[singleSubFolder, remain] = strtok(remain, ';');
+	if isempty(singleSubFolder)
+		break;
+	end
+	listOfFolderNames = [listOfFolderNames singleSubFolder];
+end
+numberOfFolders = length(listOfFolderNames)
+
+for i = 2 : numberOfFolders
+    path = convertCharsToStrings(listOfFolderNames{i});
+    file = path+'\Parameters.mat';
+    load(file,myvars);
+    TotalVector = [TotalVector; AngleVector];
+    firstAngle = AngleVector(length(AngleVector));
+    FirstVector = [FirstVector; firstAngle];
+    meanAngle = mean(AngleVector);
+    MeanVector = [MeanVector; meanAngle];
+end
+
+
+
+%% outside of loop
+
+%creat large figure
+% figure('Renderer', 'painters', 'Position', [10 10 1200 800])
+
+
+%plot 5 angles
+% subplot(1,3,1)
+f1 = figure;
+h = histogram(TotalVector, 10, 'BinLimits', [5, 90], 'Normalization', 'pdf')
+%label axes and title
+xlabel('Angle')
+ylabel('Probability')
+title('First five angles')
+%Create fit
+distribution = fitdist(TotalVector, 'normal');
+%%Visualize the resulting fit
+totalfit = linspace(min(TotalVector), max(TotalVector), 1000);
+hold on
+plot(totalfit, pdf(distribution, totalfit))
+hold off
+
+%plot mean of 5 angles
+% subplot(1,3,2)
+f2 = figure;
+m = histogram(MeanVector, 10, 'BinLimits', [5, 90], 'Normalization', 'pdf')
+xlabel('Angle')
+ylabel('Probability')
+title('Mean of first five')
+%Create fit
+distribution = fitdist(MeanVector, 'normal');
+%%Visualize the resulting fit
+meanfit = linspace(min(MeanVector), max(MeanVector), 1000);
+hold on
+plot(meanfit, pdf(distribution, meanfit))
+hold off
+
+%plot first angle only
+% subplot(1,3,3)
+f3= figure;
+f = histogram(FirstVector, 10, 'BinLimits', [5, 90], 'Normalization', 'pdf')
+xlabel('Angle')
+ylabel('Probability')
+title('First angle only')
+%Create fit
+distribution = fitdist(FirstVector, 'normal');
+%%Visualize the resulting fit
+firstfit = linspace(min(FirstVector), max(FirstVector), 1000);
+hold on
+plot(firstfit, pdf(distribution, firstfit))
+hold off
+
+save('FirstVector_alldata.mat','FirstVector')
+save('MeanVector_alldata.mat','MeanVector')
+xlswrite('MeanVector_alldata.xlsx',MeanVector)
+save('TotalVector_alldata.mat','TotalVector')
