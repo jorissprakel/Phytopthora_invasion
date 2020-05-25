@@ -213,5 +213,27 @@ finding a balance can be tricky, although after the start of invasion the cyst m
 
 The work function Code_Arb_Profile_Avg_complete_function is much alike the Code_Arb_Profile codes, as discussed above.
 
+-----------------------------ANALYSIS OF Angle data----------------------------------
+
+The analysis of angle data was done from either data of cells expressing GFP in their cytoplasm, or by inverting a coloured slab.
+This code is called 'distances_centers_angle_v2_final'
+In the inversion case, dark long protrusions are cells (this can be checked in the transmission channel), care must be taken to avoid
+bubbles in the chosen ROI to analyse. If this went wrong, rerunning the ROI picker is straightforward and should be done.
+The code finds it hard to analyse cells that grow completely horizontally (due to the ellipsoidality of the resulting void in the slice)
+so it will sometimes throw up some missed slices. That why we chose to average the top 5 angles (2.5 microns of germ tube indentation,
+which is about the thickness of the tube itself).
+The gneeral workflow of this was: build a ppt file with the whole FOV TD image, run the code. Run the first sections to generate the ROI,
+anad analyse the slices. Don't forget to increment the generated folder for this ROI with a trailing number, and then use thesame number
+(or a tickmark) to label that you have had that cell in the ppt slide on the TD image. The sections Total Distances and Plot vs Time
+were not used in our study except for 1 small figure in the SI.
+
+After analysing all of the ROIs, it is important to aggregate the data from all folders into a more easily accesible data structure.
+This is performed by the code 'Aggregator'.
+Important for this code is to be in the top working folder as the present working directory that contains all of the folders per cell
+with data in it. The output is both .mat and .xlsx files!
+
+
+
+
 
 
