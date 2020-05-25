@@ -1,0 +1,317 @@
+%% Distance and angle calculator
+
+% This script determin_startes the center of the GFP signal in a field of view
+% and uses that to calculate the distances between the centers.This can be
+% used to get the growth. The distances can also be used to get the angle.
+
+clear all
+clc
+
+%thresholds
+gthr = 0.4;
+%create parameters struct
+param = struct;
+%change these parameters to appropriate values before running the script!
+param.Time_interval_min = 4;  
+%data set starts at T=0(fill in 1) or T=1(fill in 0)
+min_start = 0;
+%ratio of �/pixel
+pixratio = 0.41;
+param.Micron_per_pixel = pixratio;
+%stack thickness
+zdist = 0.5;
+%% Load in GFP images %%
+
+% select file 
+[file,path] = uigetfile('.tif');
+
+% split off name
+delimsplit = 'T';
+filenamesplitG = split(file,delimsplit);
+filenamesplitnameG = strcat(filenamesplitG{1},delimsplit);
+
+% Go to active folder, save folder
+cd(path);
+OldFolder = cd(pwd);
+
+% determin_starte amount of files carrying this name.
+tb_analysedG = dir(strcat(filenamesplitnameG,'*'));
+num_tb_analysedG = size(tb_analysedG,1);
+last_timepointG = num_tb_analysedG-min_start;
+%Make new folder for parameters and images
+OldF = convertCharsToStrings(OldFolder);
+NewF = '\Distances_and_angles';
+StorageFolder = strcat(OldF+NewF);
+mkdir(StorageFolder);
+
+%take parameters from image
+info = imfinfo(file);
+param.File_Analysed = info.Filename;
+param.Bit_Depth = info.BitDepth;
+param.y_pixel_size = info.Height;
+param.x_pixel_size = info.Width;
+param.z_stacks = numel(info);
+
+%% Make Summed image %% 
+ImTotal = cell(num_tb_analysedG,1);
+
+%For images that do not have to be inverted use this (e.g. 14-3 GFP strain)
+
+for i = 1 : num_tb_analysedG
+    filname_ImTotal = strcat(filenamesplitnameG,num2str(i-min_start),'.tif');
+    stackheight = size(imfinfo(filname_ImTotal),1);  
+    StackAcqui = [];
+    for j = 1:stackheight
+        StackAcqui(:,:,j) = imread(filname_ImTotal,j);
+        StackAcqui = sum(StackAcqui,3);
+        Stack_forROIxaxis(:,:,j) = imread(filname_ImTotal,j);
+    end
+    ImTotal{i}=StackAcqui; 
+end     
+
+
+%For images that have be inverted use this (e.g. wildtype)
+%Do note that for inversion, another line has to be uncommented in main
+%loop later on.
+
+% for i = 1 : num_tb_analysedG
+%     filname_ImTotal = strcat(filenamesplitnameG,num2str(i-min_start),'.tif');
+%     stackheight = size(imfinfo(filname_ImTotal),1);
+%     StackAcqui = [];
+%     for j = 1:stackheight
+%         noninv = imread(filname_ImTotal,j);
+%         invmax = max(max(noninv));
+%         invthr = 0.2;
+%         binnoninv = noninv > invmax*invthr;
+%         StackAcqui(:,:,j) = imcomplement(binnoninv);
+%         StackAcqui = sum(StackAcqui,3);
+%         Stack_forROIxaxis(:,:,j) = imread(filname_ImTotal,j);
+%     end
+%     ImTotal{i}=StackAcqui; 
+% end     
+
+%% Select FOV %%
+lastimgnr = num_tb_analysedG - min_start;
+maxvalue = max(max(ImTotal{lastimgnr}));
+figure;
+imshow(ImTotal{lastimgnr},[0 maxvalue]);
+r1 = getrect();
+close()
+disp('Region of interest selected with coordinates')
+disp(r1)
+param.Region_of_Interest = r1;
+%% Crop and get centers %%
+
+filenametbu = convertCharsToStrings(filenamesplitnameG);
+%initialize arrays
+distArray = [];
+angleArray = [];
+XcenterArray = [];
+YcenterArray = [];
+ImgArray = [];
+%loop over each z slice for each timepoint and determine centers, then use
+%those centers to determine angles and distances
+for i = 1 : num_tb_analysedG
+    filname_ImTotal = strcat(filenamesplitnameG,num2str(i-min_start),'.tif');
+    stackheight = size(imfinfo(filname_ImTotal),1);
+    stringnumber = num2str(i-min_start);
+    %make folder for each time point to store all the z stacks
+    NewFolder = filenametbu + num2str(i-min_start);
+    mkdir (StorageFolder, NewFolder);
+    newpath = strcat(StorageFolder+'\'+NewFolder+'\');
+    for j = 1 : stackheight
+        %crop each image
+        Img = imread (filname_ImTotal, j);
+        CImg = imcrop (Img, r1);
+        ImgArray{j,i} = CImg;
+        %optionally apply gauss filter
+        CImg = imgaussfilt(CImg,1);
+        %show image
+        imgmax = max(max(CImg));
+        figure('visible', 'off');
+        imshow (CImg, [0 imgmax])
+        bw = CImg > gthr*imgmax;
+        %uncomment next line if inverting image
+%         bw = imcomplement(bw);
+        try 
+            %determine center position
+            stats = regionprops('table',bw,'Centroid',...
+            'MajorAxisLength','MinorAxisLength');
+            currentcenters = stats.Centroid;
+            %get x and y of centroids
+            newxCentroids = currentcenters(1:2:end);
+            newyCentroids = currentcenters(2:2:end);
+            diameters = mean([stats.MajorAxisLength stats.MinorAxisLength],2);
+            radii = diameters/2;
+            %add x and y to array
+            XcenterArray(j,i) = newxCentroids;
+            YcenterArray(j,i) = newyCentroids;
+            %Plot circles based on data points as visual control
+            hold on
+            viscircles(currentcenters,radii);
+            plot(newxCentroids, newyCentroids, 'r*', 'MarkerSize', 10);
+            hold off
+            try    
+                %get old centers
+                oldxCentroids = XcenterArray(j-1, i);
+                oldyCentroids = YcenterArray(j-1, i);
+                %new - old centers
+                distances = sqrt((newxCentroids - oldxCentroids) .^2 + (newyCentroids - oldyCentroids) .^ 2);
+                %change from pixel to �
+                xydist = distances*pixratio;
+                %take z into account as well
+                sdist = sqrt(xydist .^2 + zdist .^2);
+                %add to array
+                distArray(j,i) = sdist;
+                %determine angle using the distances
+                angle = acosd(xydist/sdist);
+                angleArray(j,i) = angle;
+            catch
+                err = ['unable to compare centers between slices ', num2str(j), ' and ', num2str(j-1)];
+                disp(err)
+            end
+        catch
+            msg = ['cannot determine centers for slice ', num2str(j), ' in timepoint ', num2str(i)];
+            XcenterArray(j,i) = NaN;
+            YcenterArray(j,i) = NaN;
+            distArray(j,i) = NaN;
+            angleArray(j,i) = NaN;
+            disp(msg)
+        end 
+        %save each stack in the correct subfolder
+        saveas(gcf, newpath+'_binary_location_z_stack_'+num2str(j)+'.png');
+        close()  
+    end
+    centerArray = reshape([XcenterArray;YcenterArray], size(XcenterArray,1), []);
+    csvwrite(StorageFolder+'\distances.csv', distArray);
+    csvwrite(StorageFolder+'\angles.csv', angleArray);
+    csvwrite(StorageFolder+'\x_of_center.csv', XcenterArray);
+    csvwrite(StorageFolder+'\y_of_center.csv', YcenterArray);
+    csvwrite(StorageFolder+'\centers_xy.csv', centerArray);
+end
+% store centers and distances in struct and save all parameters
+param.Centers = centerArray;
+param.Distances = distArray;
+
+
+
+
+%% Make histogram of the first five angles for single timepoint
+
+%Choose a timepoint and manually set the top slice
+set_timepoint = 20;
+topslice = 37;
+
+last_five = topslice-4;
+corrf = last_five-1;
+IntrusionArray = [];
+for i = set_timepoint
+    for j = last_five : topslice
+        angle = angleArray(j, i);
+        IntrusionArray(j-corrf, 1) = angle;
+    end
+end
+%Replace values below 5 with NaN as they are unrealistic values. 
+IntrusionArray(IntrusionArray < 5) = NaN;
+%plot histogram of first five intrusion angles
+h = histogram(IntrusionArray, 10, 'BinLimits', [5, 90], 'Normalization', 'pdf')
+%label axes and title
+xlabel('Angle')
+ylabel('Probability')
+title('Intrusion Angles')
+
+%test to see if this come from a normal distribution?
+kst = kstest(IntrusionArray);
+
+%fill up NaN values (necessary for linspace (line216)  
+testarray = fillmissing(IntrusionArray, 'nearest');  %alternatively use 'linear' interpolation or 'movmean'
+ntest = num2cell(testarray);
+
+%Create vector
+AngleVector = cat(2, ntest{:,1})';
+%Determine distribution, assuming you input the correct distribution type   
+distribution = fitdist(AngleVector, 'normal');
+%%Visualize the resulting fit
+index = linspace(min(AngleVector), max(AngleVector), 1000);
+hold on
+plot(index, pdf(distribution, index))
+hold off
+savefig(StorageFolder+'\histogram.fig');
+close()
+
+meanAngle = mean(AngleVector);
+%% Determine total distances
+
+%calculate top per timepoint using these factors
+%fill in YOURSELF (raw_top is top slice at t=1; movedown_over_time=
+%(topslice(first timepoint)-topslice(at last timepoint))/(# of timepoints)
+movedown_over_time = 0;
+raw_top = 40;
+
+%remove noise from bottom if necessary
+rmvdown = 0;
+raw_bot = 0;
+
+%get sum distances for each timepoint
+tempdistance = [];
+sumdistArray = [];
+timeArray = [];
+for i = 1: num_tb_analysedG
+    i_top_slice = raw_top - (movedown_over_time * i);
+    i_bot_slice = raw_bot - (rmvdown * i);
+    for j = 1 : i_top_slice
+        if j < i_bot_slice
+            tempdistance(j, 1) = NaN;
+        else
+            tempdistance(j, 1) = distArray(j, i);
+            tempdistance(tempdistance > 1) = [];
+            sumdistance = nansum(tempdistance);
+            sumdistArray(1, i) = sumdistance;
+            timeArray(1,i) = i*param.Time_interval_min;
+        end
+    end
+end
+
+backup_sumdistArray = sumdistArray;
+backup_timeArray = timeArray;
+
+%% plot versus time
+
+%remove 0 values from sumdist and get rid of corresponding time values
+sumdistArray(sumdistArray==0) = NaN;
+for i = 1 : num_tb_analysedG
+    if isnan(sumdistArray(1,i))
+        timeArray(1,i) = NaN;
+    end
+end
+sumdistArray = rmmissing(sumdistArray);
+timeArray = rmmissing(timeArray);
+
+%make scatter plot and plot trendline
+dp = scatter(timeArray, sumdistArray);
+xlabel('Time(min)')
+ylabel('Total length(�m)')
+title('Growth over time')
+%make linear fit
+coef = polyfit(repmat(timeArray, size(sumdistArray,1), 1), sumdistArray, 1);
+slope = coef(1);
+intercept = coef(2);
+param.Growth_velocity = slope;
+%text to plot
+txt = {'Slope =', strcat(num2str(slope),' (�m/min)'), 'Intercept =', strcat(num2str(intercept),' (�m)')};
+%plot fit
+hold on
+h = refline(coef(1), coef(2));
+legend('data', 'linear fit')
+text(timeArray(3), 0.6*max(sumdistArray), txt)
+hold off
+%save the figure
+saveas(gcf, StorageFolder+'\distance_over_time.png');
+close()        
+  
+%save workspace in .mat file
+save(StorageFolder+'\Parameters.mat'); 
+        
+ 
+
+  
