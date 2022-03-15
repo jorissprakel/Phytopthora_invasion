@@ -1,5 +1,7 @@
 Dear reader, this is a file describing the code used for the recent Phytopthora invasion paper by Bronkhorst et al.
 
+An image of this material has been saved on Zenodo: https://zenodo.org/badge/latestdoi/262013075
+
 The inputdata source of this paper is imaging data in a .nd2 format, taken using a nikon C2 confocal. 
 Analysis was performed using matlab scripts, custom written and uploaded into this project.
 The imaging data was structured in folders for each experiment with the label:
